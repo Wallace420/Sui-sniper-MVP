@@ -13,11 +13,9 @@ Welcome to the **sui-token-sniper-Bot**! This bot monitoring the dex and snipe n
 
 ## 📞 **Stay Connected**
 
-Gmail: tom.kinddev@gmail.com
+Telegram: @DirtySanch3z https://t.me/DirtySanch3z
 
-Telegram: [@erikerik116](https://t.me/erikerik116)
-
-Discord: @erikerik116
+Discord: @DirtySancheZ_
 
 
 ## 🎯 **Key Features**
@@ -78,7 +76,7 @@ Follow these steps to get your **PumpFun Sniper Bot v5.2** up and running!
 1. **Clone the Repository**:
 
     ```bash
-    git clone https://github.com/erikerik116/Sui-sniper-MVP.git
+    git clone https://github.com/Wallace420/Sui-sniper-MVP.git
     ```
 
 2. **Install Dependencies**:
