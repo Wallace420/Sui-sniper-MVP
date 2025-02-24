@@ -1,4 +1,5 @@
-import { SuiClient, SuiEventFilter, SuiWebsocketClient } from '@mysten/sui/client';
+import { SuiClient, SuiEventFilter } from '@mysten/sui/client';
+import { SuiClient as WebsocketClient } from '@mysten/sui/client';
 import { Pool, Dex } from '../dex';
 import { TokenSecurity } from './tokenSecurity';
 import { MEVProtection } from './mevProtection';
@@ -12,18 +13,21 @@ export interface PoolScannerConfig {
     mevProtection: MEVProtection;
     maxCacheSize?: number;
     wsReconnectDelay?: number;
+    maxValidationAttempts: number;
+    poolMonitoringTimeMs: number;
 }
 
 interface PoolCache {
     [key: string]: {
         pool: Pool;
         timestamp: number;
+        validationAttempts: number;
     };
 }
 
 export class PoolScanner {
     private client: SuiClient;
-    private wsClient: any | null = null;
+    private wsClient: WebsocketClient | null = null;
     private config: PoolScannerConfig;
     private dexes: Record<string, Dex>;
     private lastScannedBlock: string | null = null;
@@ -44,7 +48,9 @@ export class PoolScanner {
             tokenSecurity: config.tokenSecurity,
             mevProtection: config.mevProtection,
             maxCacheSize: config.maxCacheSize || 1000,
-            wsReconnectDelay: config.wsReconnectDelay || 5000
+            wsReconnectDelay: config.wsReconnectDelay || 5000,
+            maxValidationAttempts: config.maxValidationAttempts,
+            poolMonitoringTimeMs: config.poolMonitoringTimeMs
         };
     }
 
@@ -76,9 +82,9 @@ export class PoolScanner {
                 };
                 
                 if (this.lastScannedBlock) {
-                    filter.cursor = {
+                    Object.assign(filter, {
                         cursor: this.lastScannedBlock
-                    };
+                    });
                 }
 
                 const events = await this.client.queryEvents({
@@ -122,6 +128,8 @@ export class PoolScanner {
 
             // Check cache first
             const cachedPool = this.poolCache[poolId];
+            const validationAttempts = cachedPool ? cachedPool.validationAttempts || 0 : 0;
+
             if (cachedPool && Date.now() - cachedPool.timestamp < 60000) { // 1 minute cache
                 console.debug(`Using cached pool data for ${poolId}`);
                 await onPoolFound(cachedPool.pool);
@@ -135,6 +143,7 @@ export class PoolScanner {
             }
 
             const pool: Pool = {
+                id: poolId,
                 poolId: poolId,
                 coin_a: event.parsedJson.coin_a,
                 coin_b: event.parsedJson.coin_b,
@@ -155,6 +164,7 @@ export class PoolScanner {
                 console.error(`Failed to fetch liquidity for pool ${poolId}:`, error);
                 return;
             }
+
             // Validate both tokens with optimized security check
             const [validationA, validationB] = await Promise.all([
                 this.config.tokenSecurity.validateToken(pool.coin_a),
@@ -165,8 +175,15 @@ export class PoolScanner {
                 console.debug(`Pool ${poolId} passed security validation`);
                 this.updateCache(poolId, pool);
                 await onPoolFound(pool);
+            } else if (validationAttempts < this.config.maxValidationAttempts!) {
+                // Monitor pool for potential changes
+                console.debug(`Pool ${poolId} failed validation, monitoring for changes...`);
+                setTimeout(async () => {
+                    await this.processPoolEvent(event, dex, onPoolFound);
+                }, this.config.poolMonitoringTimeMs);
+                this.updateCache(poolId, pool, validationAttempts + 1);
             } else {
-                console.warn(`Pool ${poolId} failed security validation:`,
+                console.warn(`Pool ${poolId} failed security validation after ${validationAttempts} attempts:`,
                     !validationA.isValid ? validationA.reason : validationB.reason);
             }
         } catch (error) {
@@ -180,7 +197,7 @@ export class PoolScanner {
         if (!this.config.wsEndpoint) return;
 
         try {
-            this.wsClient = new SuiWebsocketClient(this.config.wsEndpoint);
+            this.wsClient = new WebsocketClient({ url: this.config.wsEndpoint });
 
             // Subscribe to events for each DEX
             for (const dex of Object.values(this.dexes)) {
@@ -192,8 +209,16 @@ export class PoolScanner {
                 });
             }
 
-            this.wsClient.on('error', this.handleWebSocketError.bind(this));
-            this.wsClient.on('close', this.handleWebSocketClose.bind(this, onPoolFound));
+            this.wsClient?.subscribeEvent({
+                filter: { MoveEventType: 'error' },
+                onMessage: async (error) => {
+                    await this.handleWebSocketError(error);
+                }
+            });
+            this.wsClient?.subscribeEvent({
+                filter: { All: [] }, // Subscribe to all events
+                onMessage: () => this.handleWebSocketClose(onPoolFound)
+            });
 
         } catch (error) {
             console.error('WebSocket connection error:', error);
@@ -204,7 +229,7 @@ export class PoolScanner {
     private async handleWebSocketError(error: any) {
         console.error('WebSocket error:', error);
         if (this.wsClient) {
-            this.wsClient.disconnect();
+            // Since SuiClient doesn't have a disconnect method, we'll clean up references
             this.wsClient = null;
         }
     }
@@ -227,10 +252,45 @@ export class PoolScanner {
         this.reconnectAttempts = Math.min(this.reconnectAttempts + 1, this.MAX_RECONNECT_ATTEMPTS);
     }
 
-    private updateCache(poolId: string, pool: Pool) {
+    private async monitorPool(pool: Pool, currentAttempts: number, onPoolFound: (pool: Pool) => Promise<void>): Promise<void> {
+        console.debug(`Monitoring pool ${pool.id} (attempt ${currentAttempts + 1}/${this.config.maxValidationAttempts})`);
+
+        return new Promise((resolve) => {
+            setTimeout(async () => {
+                try {
+                    // Re-validate the pool
+                    const [validationA, validationB] = await Promise.all([
+                        this.config.tokenSecurity.validateToken(pool.coin_a),
+                        this.config.tokenSecurity.validateToken(pool.coin_b)
+                    ]);
+
+                    if (validationA.isValid && validationB.isValid) {
+                        console.debug(`Pool ${pool.id} passed validation after monitoring`);
+                        this.addToCache(pool);
+                        await onPoolFound(pool);
+                    } else if (currentAttempts + 1 < this.config.maxValidationAttempts!) {
+                        // Continue monitoring if we haven't reached max attempts
+                        await this.monitorPool(pool, currentAttempts + 1, onPoolFound);
+                    } else {
+                        console.debug(`Pool ${pool.id} failed validation after ${currentAttempts + 1} attempts`);
+                    }
+                } catch (error) {
+                    console.error(`Error monitoring pool ${pool.id}:`, error);
+                }
+                resolve();
+            }, this.config.poolMonitoringTimeMs);
+        });
+    }
+
+    private addToCache(pool: Pool) {
+        this.updateCache(pool.id, pool);
+    }
+
+    private updateCache(poolId: string, pool: Pool, validationAttempts: number = 0) {
         this.poolCache[poolId] = {
             pool,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            validationAttempts
         };
 
         // Cleanup cache if it exceeds max size
@@ -249,8 +309,9 @@ export class PoolScanner {
     stopScanning() {
         this.isScanning = false;
         if (this.wsClient) {
-            this.wsClient.disconnect();
+            // Since SuiClient doesn't have a disconnect method, we'll just nullify the reference
             this.wsClient = null;
         }
     }
 }
+

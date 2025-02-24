@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "start": "ts-node index.ts",
+    "build": "tsc",
+    "dev": "ts-node-dev --respawn index.ts"
+  },
   "devDependencies": {
     "@types/node": "^22.10.6",
     "ts-node": "^10.9.2",

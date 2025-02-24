@@ -1,4 +1,4 @@
-import { Dex, Pool, populateLiquidity, populateMetadata } from './index';
+import { Dex, Pool, populateLiquidity, populateMetadata, getLiquidity } from './index';
 
 const Cetus: Dex = {
     Name: 'Cetus',
@@ -22,6 +22,9 @@ const Cetus: Dex = {
         await populateLiquidity(this.Client, pools)
         return pools
     },
+    getLiquidity: async function(poolId: string) {
+        return await getLiquidity(this.Client, poolId);
+    },
     PoolIds: new Set<string>(),
     Client: undefined as any,
     Limit: 25,
@@ -30,6 +33,7 @@ const Cetus: Dex = {
 
 async function parseEventToPool(event: any) {
     const pool: Pool = {
+        id: event.pool_id,
         poolId: event.pool_id,
         coin_a: `0x${event.coin_type_a}`,
         coin_b: `0x${event.coin_type_b}`,

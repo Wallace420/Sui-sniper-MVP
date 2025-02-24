@@ -3,28 +3,31 @@ import { Dex, Pool, populateLiquidity, populateMetadata } from './index';
 const Bluemove: Dex = {
     Name: 'Bluemove',
     MoveEventType: '0xb24b6789e088b876afabca733bed2299fbc9e2d6369be4d1acfa17d8145454d9::swap::Created_Pool_Event',
-    GetPools: async function() {
+    GetPools: async function () {
         const eventsResult: any = await this.Client.queryEvents({
             query: { MoveEventType: this.MoveEventType },
             order: "descending",
             limit: this.Limit,
         });
-    
-        let pools: Pool[] = []
-        for(const e of eventsResult.data) {
-            if(!this.PoolIds.has(e.parsedJson.pool_id)) {
-                const pool = await parseEventToPool(e.parsedJson)
-                this.PoolIds.add(e.parsedJson.pool_id)
-                pools.push(pool)
+
+        let pools: Pool[] = [];
+        for (const e of eventsResult.data) {
+            if (!this.PoolIds.has(e.parsedJson.pool_id)) {
+                const pool = await parseEventToPool(e.parsedJson);
+                this.PoolIds.add(e.parsedJson.pool_id);
+                pools.push(pool);
             }
         };
-        await populateLiquidity(this.Client, pools)
-        await populateMetadata(this.Client, pools)
-        return pools
+        await populateLiquidity(this.Client, pools);
+        await populateMetadata(this.Client, pools);
+        return pools;
     },
     PoolIds: new Set<string>(),
     Client: undefined as any,
     Limit: 25,
+    getLiquidity: function (poolId: any) {
+        throw new Error('Function not implemented.');
+    }
 };
 
 async function parseEventToPool(event: any) {

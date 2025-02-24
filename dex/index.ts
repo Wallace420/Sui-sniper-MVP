@@ -3,8 +3,10 @@ import * as path from 'path';
 
 import { CoinMetadata, SuiClient } from '@mysten/sui/client';
 import { convertMYSTtoSUI } from '../utils';
+import { TokenLinks } from '../utils/links';
 
 export interface Dex {
+    getLiquidity(poolId: any): any;
     Name: string;
     MoveEventType: string;
     GetPools: () => Promise<Pool[]>;
@@ -14,6 +16,7 @@ export interface Dex {
 }
 
 export interface Pool {
+    id: string;
     poolId: string;
     coin_a: string;
     coin_b: string;
@@ -21,6 +24,7 @@ export interface Pool {
     poolCreated: number;
     metadata?: CoinMetadata | null;
     liquidity?: string;
+    links?: TokenLinks;
 }
 
 export const loadDexes = async (client: SuiClient): Promise<Record<string, Dex>> => {
@@ -60,10 +64,14 @@ export const populateLiquidity: PoolListFunc = async (client: SuiClient, pools: 
     return true
 }
 
+import { LinkManager } from '../utils/links';
+
+
 export const populateMetadata: PoolListFunc = async (client: SuiClient, pools: Pool[]) => {
     for(const pool of pools) {
         const metadata = await client.getCoinMetadata({ coinType: pool.coin_a })
         pool.metadata = metadata
+        pool.links = LinkManager.getTokenLinks(metadata, pool.poolId)
     }
     return true
 }
