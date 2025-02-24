@@ -1,4 +1,4 @@
-import { TransactionBlock } from '@mysten/sui/client';
+import { SuiTransactionBlock } from '@mysten/sui/client';
 
 export interface MEVProtectionConfig {
     maxGasBudget: number;
@@ -25,10 +25,10 @@ export class MEVProtection {
         };
     }
 
-    async protectTransaction(tx: TransactionBlock): Promise<TransactionBlock> {
+    async protectTransaction(tx: SuiTransactionBlock): Promise<SuiTransactionBlock> {
         // Set optimal gas budget with headroom for competition
         const gasBuffer = Math.floor(this.config.maxGasBudget * 0.1); // 10% buffer
-        tx.setGasBudget(this.config.maxGasBudget + gasBuffer);
+tx.setGasBudget(this.config.maxGasBudget + gasBuffer);
 
         // Calculate competitive gas price
         let gasPrice = this.config.minGasPrice;

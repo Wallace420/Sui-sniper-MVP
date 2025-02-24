@@ -6,11 +6,28 @@ export interface TokenSecurityConfig {
     maxOwnershipPercent: number;
     minPoolAge: number;
     blacklistedCreators: string[];
+    riskScoreThreshold?: number;
+    cacheTimeMs?: number;
+}
+
+interface TokenValidationCache {
+    [tokenId: string]: {
+        result: ValidationResult;
+        timestamp: number;
+    };
+}
+
+interface ValidationResult {
+    isValid: boolean;
+    riskScore: number;
+    reason?: string;
 }
 
 export class TokenSecurity {
     private client: SuiClient;
     private config: TokenSecurityConfig;
+    private validationCache: TokenValidationCache = {};
+    private readonly DEFAULT_CACHE_TIME = 300000; // 5 minutes
 
     constructor(client: SuiClient, config: TokenSecurityConfig) {
         this.client = client;
@@ -18,26 +35,47 @@ export class TokenSecurity {
             minLiquidity: config.minLiquidity || 1000,
             minHoldersCount: config.minHoldersCount || 10,
             maxOwnershipPercent: config.maxOwnershipPercent || 50,
-            minPoolAge: config.minPoolAge || 300, // 5 minutes
-            blacklistedCreators: config.blacklistedCreators || []
+            minPoolAge: config.minPoolAge || 300,
+            blacklistedCreators: config.blacklistedCreators || [],
+            riskScoreThreshold: config.riskScoreThreshold || 7,
+            cacheTimeMs: config.cacheTimeMs || this.DEFAULT_CACHE_TIME
         };
     }
 
-    async validateToken(tokenId: string): Promise<{ isValid: boolean; riskScore: number; reason?: string }> {
+    async validateToken(tokenId: string): Promise<ValidationResult> {
         try {
-            const tokenData = await this.client.getObject({ id: tokenId, options: { showContent: true } });
+            // Check cache first
+            const cachedResult = this.validationCache[tokenId];
+            if (cachedResult && Date.now() - cachedResult.timestamp < this.config.cacheTimeMs!) {
+                return cachedResult.result;
+            }
+
+            const tokenData = await this.client.getObject({ 
+                id: tokenId, 
+                options: { 
+                    showContent: true,
+                    showDisplay: true,
+                    showType: true
+                } 
+            });
+
             const riskFactors = await this.calculateRiskFactors(tokenData);
             const riskScore = this.calculateRiskScore(riskFactors);
 
-            if (riskScore > 7) {
-                return { isValid: true, riskScore };
-            }
-
-            return { 
-                isValid: false, 
+            const result: ValidationResult = {
+                isValid: riskScore > this.config.riskScoreThreshold!,
                 riskScore,
-                reason: `Risk score too low: ${riskScore}/10`
+                reason: riskScore <= this.config.riskScoreThreshold! ? 
+                    `Risk score too low: ${riskScore}/10` : undefined
             };
+
+            // Update cache
+            this.validationCache[tokenId] = {
+                result,
+                timestamp: Date.now()
+            };
+
+            return result;
         } catch (error) {
             return { 
                 isValid: false, 
@@ -49,21 +87,18 @@ export class TokenSecurity {
 
     private async calculateRiskFactors(tokenData: SuiObjectResponse): Promise<Map<string, number>> {
         const riskFactors = new Map<string, number>();
+        const promises = [
+            this.checkCreatorReputation(tokenData),
+            this.checkLiquidityDepth(tokenData),
+            this.checkHolderDistribution(tokenData),
+            this.analyzeContractCode(tokenData)
+        ];
 
-        // Check token creator reputation
-        const creatorScore = await this.checkCreatorReputation(tokenData);
+        const [creatorScore, liquidityScore, distributionScore, codeQualityScore] = await Promise.all(promises);
+
         riskFactors.set('creatorScore', creatorScore);
-
-        // Check liquidity depth
-        const liquidityScore = await this.checkLiquidityDepth(tokenData);
         riskFactors.set('liquidityScore', liquidityScore);
-
-        // Check holder distribution
-        const distributionScore = await this.checkHolderDistribution(tokenData);
         riskFactors.set('distributionScore', distributionScore);
-
-        // Check contract code quality
-        const codeQualityScore = await this.analyzeContractCode(tokenData);
         riskFactors.set('codeQualityScore', codeQualityScore);
 
         return riskFactors;
@@ -89,34 +124,89 @@ export class TokenSecurity {
     }
 
     private async checkCreatorReputation(tokenData: SuiObjectResponse): Promise<number> {
-        // Implement creator reputation check
-        // Check if creator is blacklisted
-        // Check creator's history of token launches
-        // Return score between 0-1
-        return 0.8;
+        try {
+            const creator = tokenData.data?.content?.creator;
+            if (!creator) return 0;
+
+            if (this.config.blacklistedCreators.includes(creator)) {
+                return 0;
+            }
+
+            // Check creator's history
+            const creatorHistory = await this.client.queryEvents({
+                query: { Sender: creator }
+            });
+
+            // Analyze creator's transaction history
+            const activityScore = Math.min(creatorHistory.data.length / 100, 1); // Normalize to 0-1
+            return 0.8 * activityScore;
+        } catch {
+            return 0.5; // Default score if check fails
+        }
     }
 
     private async checkLiquidityDepth(tokenData: SuiObjectResponse): Promise<number> {
-        // Implement liquidity depth analysis
-        // Check if liquidity meets minimum requirements
-        // Check liquidity distribution across price ranges
-        // Return score between 0-1
-        return 0.7;
+        try {
+            const liquidity = await this.getLiquidityInfo(tokenData);
+            if (liquidity < this.config.minLiquidity) {
+                return 0.3;
+            }
+            return Math.min(liquidity / (this.config.minLiquidity * 10), 1);
+        } catch {
+            return 0.5;
+        }
     }
 
     private async checkHolderDistribution(tokenData: SuiObjectResponse): Promise<number> {
-        // Implement holder distribution analysis
-        // Check number of unique holders
-        // Check ownership concentration
-        // Return score between 0-1
-        return 0.9;
+        try {
+            const holders = await this.getHoldersInfo(tokenData);
+            if (holders.count < this.config.minHoldersCount) {
+                return 0.3;
+            }
+
+            const distributionScore = 1 - (holders.maxOwnershipPercent / 100);
+            return Math.max(0.2, distributionScore);
+        } catch {
+            return 0.5;
+        }
     }
 
     private async analyzeContractCode(tokenData: SuiObjectResponse): Promise<number> {
-        // Implement contract code analysis
-        // Check for common vulnerabilities
-        // Check for suspicious functions (e.g., blacklist, max tx)
-        // Return score between 0-1
-        return 0.85;
+        try {
+            const code = tokenData.data?.content?.disassembled;
+            if (!code) return 0.5;
+
+            let score = 1;
+            const riskPatterns = [
+                'DenyCap',
+                'blacklist',
+                'maxTransaction',
+                'ownerOnly'
+            ];
+
+            for (const pattern of riskPatterns) {
+                if (JSON.stringify(code).includes(pattern)) {
+                    score -= 0.2;
+                }
+            }
+
+            return Math.max(0.2, score);
+        } catch {
+            return 0.5;
+        }
+    }
+
+    private async getLiquidityInfo(tokenData: SuiObjectResponse): Promise<number> {
+        // Implement liquidity check logic
+        return 1000; // Placeholder
+    }
+
+    private async getHoldersInfo(tokenData: SuiObjectResponse): Promise<{ count: number; maxOwnershipPercent: number }> {
+        // Implement holders analysis logic
+        return { count: 20, maxOwnershipPercent: 30 }; // Placeholder
+    }
+
+    clearCache() {
+        this.validationCache = {};
     }
 }
