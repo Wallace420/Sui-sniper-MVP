@@ -171,31 +171,6 @@ export class TokenSecurity {
         }
     }
 
-    private async analyzeContractCode(tokenData: SuiObjectResponse): Promise<number> {
-        try {
-            const code = tokenData.data?.content?.disassembled;
-            if (!code) return 0.5;
-
-            let score = 1;
-            const riskPatterns = [
-                'DenyCap',
-                'blacklist',
-                'maxTransaction',
-                'ownerOnly'
-            ];
-
-            for (const pattern of riskPatterns) {
-                if (JSON.stringify(code).includes(pattern)) {
-                    score -= 0.2;
-                }
-            }
-
-            return Math.max(0.2, score);
-        } catch {
-            return 0.5;
-        }
-    }
-
     private async getLiquidityInfo(tokenData: SuiObjectResponse): Promise<number> {
         // Implement liquidity check logic
         return 1000; // Placeholder

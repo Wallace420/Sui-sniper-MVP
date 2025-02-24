@@ -28,7 +28,6 @@ export class MEVProtection {
     async protectTransaction(tx: SuiTransactionBlock): Promise<SuiTransactionBlock> {
         // Set optimal gas budget with headroom for competition
         const gasBuffer = Math.floor(this.config.maxGasBudget * 0.1); // 10% buffer
-tx.setGasBudget(this.config.maxGasBudget + gasBuffer);
 
         // Calculate competitive gas price
         let gasPrice = this.config.minGasPrice;
@@ -40,7 +39,6 @@ tx.setGasBudget(this.config.maxGasBudget + gasBuffer);
 
         // Add additional protection mechanisms
         if (this.config.privateMempool) {
-            // Use private mempool with premium
             gasPrice = Math.floor(gasPrice * this.config.dynamicGasMultiplier);
         }
 
@@ -53,7 +51,6 @@ tx.setGasBudget(this.config.maxGasBudget + gasBuffer);
         // Dynamic gas optimization based on network conditions and competition
         const gasPrice = Math.max(baseGas, this.config.minGasPrice);
         const optimizedGas = Math.floor(gasPrice * this.config.dynamicGasMultiplier);
-        
         return optimizedGas + this.config.priorityFee;
     }
 

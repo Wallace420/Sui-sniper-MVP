@@ -155,7 +155,6 @@ export class PoolScanner {
                 console.error(`Failed to fetch liquidity for pool ${poolId}:`, error);
                 return;
             }
-
             // Validate both tokens with optimized security check
             const [validationA, validationB] = await Promise.all([
                 this.config.tokenSecurity.validateToken(pool.coin_a),
