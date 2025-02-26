@@ -1,0 +1,31 @@
+// Prisma schema for pool storage
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./pools.db"
+}
+
+model Pool {
+  id            String   @id
+  poolId        String   @unique
+  dex           String
+  coinA         String
+  coinB         String
+  liquidity     String
+  poolCreated   DateTime
+  firstSeen     DateTime @default(now())
+  lastSeen      DateTime @updatedAt
+  validations   Int      @default(0)
+  isValid       Boolean  @default(false)
+  liquidityHistory Json?
+}
+
+model PoolScanCursor {
+  id           String   @id @default("last_cursor")
+  lastBlock    String?
+  lastScanTime DateTime
+}

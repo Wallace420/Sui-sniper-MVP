@@ -13,6 +13,8 @@ export interface Dex {
     PoolIds: Set<string>;
     Client: SuiClient;
     Limit: number;
+    lastScanTime: number;
+    scanInterval: number;
 }
 
 export interface Pool {
@@ -25,6 +27,19 @@ export interface Pool {
     metadata?: CoinMetadata | null;
     liquidity?: string;
     links?: TokenLinks;
+    formattedDate?: string;
+}
+
+export function formatPoolDate(timestamp: number): string {
+    return new Date(timestamp).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+    });
 }
 
 export const loadDexes = async (client: SuiClient): Promise<Record<string, Dex>> => {
@@ -33,16 +48,27 @@ export const loadDexes = async (client: SuiClient): Promise<Record<string, Dex>>
 
     for (const file of files) {
         if (file !== 'index.ts' && file.endsWith('.ts')) {
-            const modulePath = path.join(__dirname, file);
-            const dexModule = await import(modulePath);
+            try {
+                const modulePath = path.join(__dirname, file);
+                const dexModule = await import(modulePath);
 
-            if (dexModule.default) {
-                const dex: Dex = dexModule.default;
-                dex.Client = client; // Assign the passed SuiClient instance
-                dexes[dex.Name] = dex; // Use the MoveEventType as the key
+                if (dexModule.default) {
+                    const dex: Dex = dexModule.default;
+                    dex.Client = client;
+                    dex.PoolIds = new Set<string>(); // Reset pool IDs on load
+                    dexes[dex.Name] = dex;
+                    console.log(`Loaded DEX: ${dex.Name} with event type: ${dex.MoveEventType}`);
+                }
+            } catch (error) {
+                console.error(`Error loading DEX from ${file}:`, error);
             }
         }
     }
+
+    if (Object.keys(dexes).length === 0) {
+        console.warn('No DEX modules were loaded successfully');
+    }
+
     return dexes;
 };
 

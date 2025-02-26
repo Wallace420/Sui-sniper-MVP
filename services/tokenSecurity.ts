@@ -59,13 +59,19 @@ export class TokenSecurity {
                 } 
             });
 
-            const riskFactors = await this.calculateRiskFactors(tokenData);
-            const riskScore = await this.calculateRiskFactors(tokenData);
+            const riskFactors = {
+                creatorReputation: await this.checkCreatorReputation(tokenData),
+                contractSafety: await this.analyzeContractCode(tokenData),
+                liquidityDepth: await this.checkLiquidityDepth(tokenData),
+                holderDistribution: await this.checkHolderDistribution(tokenData)
+            };
+            
+            const riskScore = Object.values(riskFactors).reduce((acc, score) => acc + score, 0) * 2.5; // Scale to 0-10
 
             const result: ValidationResult = {
-                isValid: typeof riskScore === 'number' && riskScore > this.config.riskScoreThreshold!,
-                riskScore: typeof riskScore === 'number' ? riskScore : 0,
-                reason: typeof riskScore === 'number' && riskScore <= this.config.riskScoreThreshold! ?
+                isValid: riskScore > this.config.riskScoreThreshold!,
+                riskScore,
+                reason: riskScore <= this.config.riskScoreThreshold! ? 
                     `Risk score too low: ${riskScore}/10` : undefined
             };
 
@@ -89,7 +95,8 @@ export class TokenSecurity {
     private async checkCreatorReputation(tokenData: SuiObjectResponse): Promise<number> {
         try {
             const moveObject = tokenData.data?.content as SuiMoveObject;
-            const creator = (moveObject?.fields as { creator?: string })?.creator;
+            const fields = moveObject?.fields as Record<string, any>;
+            const creator = fields?.creator as string;
             if (!creator) return 0;
 
             if (this.config.blacklistedCreators.includes(creator)) {
@@ -112,7 +119,8 @@ export class TokenSecurity {
     private async analyzeContractCode(tokenData: SuiObjectResponse): Promise<number> {
         try {
             const moveObject = tokenData.data?.content as SuiMoveObject;
-            const code = (moveObject?.fields as { bytecode?: string })?.bytecode || '';
+            const fields = moveObject?.fields as Record<string, any>;
+            const code = fields?.bytecode as string;
             if (!code) return 0.5;
 
             let score = 1;

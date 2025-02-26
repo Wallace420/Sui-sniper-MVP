@@ -1,4 +1,4 @@
-import { SuiTransactionBlock } from '@mysten/sui/client';
+import { Transaction } from '@mysten/sui/transactions';
 
 export interface MEVProtectionConfig {
     maxGasBudget: number;
@@ -21,43 +21,40 @@ export class MEVProtection {
             flashbotRPC: config.flashbotRPC || '',
             privateMempool: config.privateMempool || false,
             maxRetries: config.maxRetries || 3,
-            dynamicGasMultiplier: config.dynamicGasMultiplier || 1.2,
+            dynamicGasMultiplier: config.dynamicGasMultiplier || 1.2
         };
     }
 
-    async protectTransaction(tx: SuiTransactionBlock): Promise<ProtectedTransaction> {
-        // Berechne einen Gas-Puffer von 10 % des maximalen Budgets
-        const gasBuffer = Math.floor(this.config.maxGasBudget * 0.1);
-
-        // Starte mit dem Mindest-Gaspreis
+    async protectTransaction(tx: Transaction): Promise<Transaction> {
+        // Set optimal gas budget with headroom for competition
+        const gasBuffer = Math.floor(this.config.maxGasBudget * 0.1); // 10% buffer
+        
+        // Calculate competitive gas price
         let gasPrice = this.config.minGasPrice;
-
-        // Berücksichtige die Priority Fee (mit dynamischer Anpassung)
+        
+        // Add priority fee with dynamic adjustment
         if (this.config.priorityFee > 0) {
             gasPrice += this.config.priorityFee * this.config.dynamicGasMultiplier;
         }
 
-        // Falls ein privater Mempool genutzt wird, wird der Gaspreis weiter angepasst
+        // Add additional protection mechanisms
         if (this.config.privateMempool) {
+            // Use private mempool with premium
             gasPrice = Math.floor(gasPrice * this.config.dynamicGasMultiplier);
         }
 
-        const gasBudget = this.config.maxGasBudget + gasBuffer;
+        // Set gas configuration using latest Sui SDK transaction block methods
+        tx.setGasBudget(this.config.maxGasBudget + gasBuffer);
+        tx.setGasPrice(gasPrice);
 
-        // Anstatt direkt Methoden am Transaction Block aufzurufen,
-        // geben wir den Transaction Block zusammen mit den berechneten Gaswerten zurück.
-        // Diese Werte sollten dann beim Ausführen des Transaction Blocks als Options-Parameter übergeben werden.
-        return {
-            transactionBlock: tx,
-            gasBudget,
-            gasPrice,
-        };
+        return tx;
     }
 
     async optimizeGas(baseGas: number): Promise<number> {
-        // Dynamische Gasoptimierung basierend auf Netzbedingungen
+        // Dynamic gas optimization based on network conditions and competition
         const gasPrice = Math.max(baseGas, this.config.minGasPrice);
         const optimizedGas = Math.floor(gasPrice * this.config.dynamicGasMultiplier);
+        
         return optimizedGas + this.config.priorityFee;
     }
 
@@ -68,7 +65,7 @@ export class MEVProtection {
     updateConfig(newConfig: Partial<MEVProtectionConfig>): void {
         this.config = {
             ...this.config,
-            ...newConfig,
+            ...newConfig
         };
     }
 }

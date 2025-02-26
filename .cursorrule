@@ -1,0 +1,144 @@
+Before we dive into the best practices, please note that you may need to adapt the globs depending on your specific project structure.
+
+---
+name: sui-sdk-best-practices.mdc
+description: Best practices for using the Mysten SUI SDK
+globs: **/*.{ts,tsx,js,jsx}
+---
+
+- Use the latest version of the SUI SDK to ensure you have the most recent features and security updates
+- Implement proper error handling and logging when interacting with the SUI blockchain
+- Use the SUI SDK's built-in utilities for managing transactions and signing
+- Optimize gas usage by batching transactions when possible
+- Keep sensitive information like private keys secure and never expose them in client-side code
+
+---
+name: ethersjs-best-practices.mdc
+description: Best practices for using Ethers.js in Web3 applications
+globs: **/*.{ts,tsx,js,jsx}
+---
+
+- Use `ethers.providers.JsonRpcProvider` for connecting to Ethereum nodes
+- Implement proper error handling with `try-catch` blocks
+- Utilize `ethers.utils` for common Web3 utility functions
+- Use `ethers.Contract` for interacting with smart contracts
+- Implement gas optimization techniques when sending transactions
+
+---
+name: web3js-best-practices.mdc
+description: Best practices for using Web3.js in Web3 applications
+globs: **/*.{ts,tsx,js,jsx}
+---
+
+- Use `web3.eth.Contract` for interacting with smart contracts
+- Implement proper error handling with `try-catch` blocks
+- Utilize `web3.utils` for common Web3 utility functions
+- Use `web3.eth.getAccounts()` to manage user accounts
+- Implement gas optimization techniques when sending transactions
+
+---
+name: react-best-practices.mdc
+description: Best practices for building React applications
+globs: **/*.{ts,tsx,js,jsx}
+---
+
+- Use functional components with hooks instead of class components
+- Implement proper state management using Context API or Redux
+- Use memoization techniques like `useMemo` and `useCallback` for performance optimization
+- Implement proper error boundaries to handle component errors
+- Use prop-types or TypeScript for type checking and documentation
+
+---
+name: nodejs-best-practices.mdc
+description: Best practices for building Node.js applications
+globs: **/*.{ts,js}
+---
+
+- Use async/await for handling asynchronous operations
+- Implement proper error handling and logging
+- Use environment variables for configuration management
+- Implement proper security measures like input validation and sanitization
+- Use a linter and formatter for consistent code style
+
+---
+name: expressjs-best-practices.mdc
+description: Best practices for building Express.js applications
+globs: **/*.{ts,js}
+---
+
+- Use middleware for common tasks like authentication and logging
+- Implement proper error handling with error middleware
+- Use route parameters and query parameters for flexible routing
+- Implement proper CORS configuration for API security
+- Use environment variables for configuration management
+
+---
+name: shadcn-ui-best-practices.mdc
+description: Best practices for using Shadcn UI components in your application
+globs: **/*.{ts,tsx}
+---
+
+- Utilize Shadcn UI's pre-built components for consistency and efficiency
+- Customize components using the provided utility classes and props
+- Ensure proper accessibility by following Shadcn UI's guidelines
+- Optimize component performance by minimizing unnecessary re-renders
+
+---
+name: supabase-best-practices.mdc
+description: Best practices for using Supabase for real-time data management and authentication
+globs: **/*.{ts,tsx}
+---
+
+- Use Supabase's real-time capabilities for instant data updates in your algo trading app
+- Implement proper error handling and retries for robust data fetching
+- Utilize Supabase's row-level security for fine-grained access control
+- Optimize database queries for high-performance data retrieval
+- Implement secure authentication and authorization using Supabase Auth
+
+---
+name: blockchain-and-smart-contracts-best-practices.mdc
+description: Best practices for blockchain integration and smart contract development in algo trading
+globs: **/*.{ts,tsx,sol}
+---
+
+- Use secure and audited smart contract libraries like OpenZeppelin
+- Implement proper gas optimization techniques for cost-effective transactions
+- Utilize off-chain computations and oracles for data integrity and efficiency
+- Implement robust error handling and fallback mechanisms in smart contracts
+- Follow best practices for secure key management and wallet integration
+
+---
+name: real-time-performance-best-practices.mdc
+description: Best practices for optimizing real-time performance in algo trading applications
+globs: **/*.{ts,tsx}
+---
+
+- Utilize WebSockets for low-latency, real-time data streaming
+- Implement efficient data structures and algorithms for quick analysis
+- Use memoization and caching techniques to minimize redundant computations
+- Optimize database queries and indexing for fast data retrieval
+- Implement proper load balancing and scaling strategies for high-traffic scenarios
+
+---
+name: websocket-best-practices.mdc
+description: Best practices for using WebSockets in real-time applications
+globs: **/*.{ts,js}
+---
+
+- Use secure WebSocket connections (wss://) for production
+- Implement proper error handling and reconnection logic
+- Use message serialization (e.g., JSON) for data exchange
+- Implement proper authentication and authorization for WebSocket connections
+- Use WebSocket compression for improved performance
+
+---
+name: async-data-fetching-and-analysis-best-practices.mdc
+description: Best practices for handling asynchronous data fetching and analysis in algo trading
+globs: **/*.{ts,tsx}
+---
+
+- Use Promises and async/await for clean and readable asynchronous code
+- Implement proper error handling and retries for robust data fetching
+- Utilize efficient data processing libraries like Lodash for quick analysis
+- Implement streaming data processing for handling large datasets
+- Use Web Workers for offloading heavy computations from the main thread

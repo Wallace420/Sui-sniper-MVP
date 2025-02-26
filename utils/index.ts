@@ -16,6 +16,11 @@ export function getMinutesSinceEpoch(epochMillis: number) {
 	return Math.floor(differenceMillis / (1000 * 60)); // Convert to minutes
 }
 
+export function formatPoolDate(timestamp: number) {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
+}
+
 export function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }

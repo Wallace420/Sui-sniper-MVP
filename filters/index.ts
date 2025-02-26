@@ -85,14 +85,14 @@ export const FilterPlugins = async (client: SuiClient, tradeConfig: TradeConfig)
                 const trade: Trade = {
                     ...pool,
                     status: TradeStatus.New,
-                    created: 0,
+                    created: Date.now(),
                     opened: 0,
                     cost: 0,
                     closedValue: 0,
-                    baseCoin: "",
+                    baseCoin: pool.coin_b,  // Use coin_b as base coin by default
                     openAttempts: 0,
                     closeAttempts: 0,
-                    price: 0,
+                    price: parseFloat(pool.liquidity || '0'),  // Convert liquidity to price
                     balance: 0,
                     manualClose: false
                 }
