@@ -10,12 +10,6 @@ export interface MEVProtectionConfig {
     dynamicGasMultiplier?: number;
 }
 
-export interface ProtectedTransaction {
-    transactionBlock: SuiTransactionBlock;
-    gasBudget: number;
-    gasPrice: number;
-}
-
 export class MEVProtection {
     private config: Required<MEVProtectionConfig>;
 

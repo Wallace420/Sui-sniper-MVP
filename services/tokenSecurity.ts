@@ -85,9 +85,6 @@ export class TokenSecurity {
             };
         }
     }
-    calculateRiskFactors(tokenData: SuiObjectResponse) {
-        throw new Error('Method not implemented.');
-    }
 
     private async checkCreatorReputation(tokenData: SuiObjectResponse): Promise<number> {
         try {

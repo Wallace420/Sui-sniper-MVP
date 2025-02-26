@@ -1,4 +1,3 @@
-import { SuiClient } from '@mysten/sui/client'
 import { TradeFilterPlugin } from './index'
 import { Trade, TradeStatus } from '../trade'
 
