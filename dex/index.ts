@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
-
 import { CoinMetadata, SuiClient } from '@mysten/sui/client';
 import { convertMYSTtoSUI } from '../utils';
 import { TokenLinks } from '../utils/links';
+import { LinkManager } from '../utils/links';
+
 
 /**
  * Interface representing a decentralized exchange (DEX) implementation
@@ -105,9 +106,6 @@ export const populateLiquidity: PoolListFunc = async (client: SuiClient, pools: 
     }
     return true
 }
-
-import { LinkManager } from '../utils/links';
-
 
 export const populateMetadata: PoolListFunc = async (client: SuiClient, pools: Pool[]) => {
     for(const pool of pools) {
