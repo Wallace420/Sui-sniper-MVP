@@ -1,9 +1,10 @@
 import { SuiClient, SuiEventFilter } from '@mysten/sui/client';
-import { SuiClient as WebsocketClient } from '@mysten/sui/client';
 import { Pool, Dex, formatPoolDate } from '../dex';
 import { TokenSecurity } from './tokenSecurity';
 import { MEVProtection } from './mevProtection';
 import chalk from 'chalk';
+import { PoolDatabase } from './db/poolDb';
+import { WebSocketWrapper } from './websocket/WebSocketWrapper';
 
 export interface PoolScannerConfig {
     scanIntervalMs: number;
@@ -29,7 +30,6 @@ interface PoolCache {
     };
 }
 
-import { PoolDatabase } from './db/poolDb';
 
 export class PoolScanner {
     private client: SuiClient;
@@ -94,7 +94,6 @@ export class PoolScanner {
     handleScanningError(_error: unknown) {
         throw new Error('Method not implemented.');
     }
-
     private async scanNewPools(onPoolFound: (pool: Pool) => Promise<void>) {
         const dexEntries = Object.entries(this.dexes);
         const batchCount = Math.ceil(dexEntries.length / this.BATCH_SIZE);

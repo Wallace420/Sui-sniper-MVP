@@ -1,7 +1,10 @@
-import { SuiClient } from '@mysten/sui/client';
+import { SuiClient, SuiEventFilter } from '@mysten/sui/client';
+import { WebsocketClient } from '@mysten/sui/dist/cjs/client/rpc-websocket-client';
 import { Pool, Dex } from '../dex';
 import { TokenSecurity } from './tokenSecurity';
 import { MEVProtection } from './mevProtection';
+import chalk from 'chalk';
+import { WebSocketWrapper } from './websocket/WebSocketWrapper';
 
 export interface DirectPoolScannerConfig {
     scanIntervalMs: number;
@@ -36,7 +39,7 @@ export class DirectPoolScanner {
     private lastScanTime: number = 0;
     private readonly SCAN_DELAY = 1000; // 1 second minimum delay between scans
     private readonly MIN_LIQUIDITY_THRESHOLD = 1000; // Minimum liquidity in SUI
-    private ws: WebSocket | null = null;
+    private ws: WebSocketWrapper | null = null;
 
     constructor(client: SuiClient, dexes: Record<string, Dex>, config: DirectPoolScannerConfig) {
         this.client = client;
@@ -120,12 +123,13 @@ export class DirectPoolScanner {
 
     private async processPool(pool: Pool, dex: Dex, onPoolFound: (pool: Pool) => Promise<void>) {
         if (this.processingQueue.has(pool.id)) {
-            console.debug(`Pool ${pool.id} is already being processed`);
+            console.log(chalk.gray(`Pool ${pool.id} is already being processed`));
             return;
         }
 
         try {
             this.processingQueue.add(pool.id);
+            console.log(chalk.cyan(`Processing pool ${pool.id} from ${dex.Name}`));
             const now = Date.now();
 
             // Validate pool existence
@@ -136,11 +140,11 @@ export class DirectPoolScanner {
                 });
 
                 if (!poolObject?.data?.content) {
-                    console.error(`Pool ${pool.id} not found or invalid`);
+                    console.error(chalk.red(`Pool ${pool.id} not found or invalid`));
                     return;
                 }
             } catch (error) {
-                console.error(`Error validating pool ${pool.id}:`, error);
+                console.error(chalk.red(`Error validating pool ${pool.id}:`), error);
                 return;
             }
 
@@ -160,27 +164,27 @@ export class DirectPoolScanner {
                             ]);
                             cachedPool.pool.liquidity = liquidity;
                             cachedPool.lastLiquidityCheck = now;
+                            console.log(chalk.blue(`Updated liquidity for pool ${pool.id}: ${liquidity}`));
                         } catch (error) {
-                            console.error(`Error updating liquidity for pool ${pool.id}:`, error);
+                            console.error(chalk.red(`Error updating liquidity for pool ${pool.id}:`), error);
                         }
                     }
                     return;
                 }
             }
 
-            // Skip old pools with optimized threshold and detailed logging
-            const AGE_THRESHOLD = 30000; // 30 seconds to match PoolScanner
+            // Skip old pools
+            const AGE_THRESHOLD = 30000; // 30 seconds
             if (pool.poolCreated && (now - pool.poolCreated > AGE_THRESHOLD)) {
-                // Add to cache with longer expiry to prevent re-processing
                 this.poolCache[pool.id] = {
                     pool,
                     timestamp: now,
                     validationAttempts: 0,
                     lastLiquidityCheck: now,
                     liquidityHistory: [Number(pool.liquidity)],
-                    riskScore: 0 // Initialize with default risk score
+                    riskScore: 0
                 };
-                console.debug(`Skipping old pool ${pool.id} created at ${new Date(pool.poolCreated).toISOString()} (age: ${(now - pool.poolCreated) / 1000}s)`);
+                console.log(chalk.gray(`Skipping old pool ${pool.id} (age: ${(now - pool.poolCreated) / 1000}s)`));
                 return;
             }
 
@@ -192,8 +196,9 @@ export class DirectPoolScanner {
                         setTimeout(() => reject(new Error('Initial liquidity fetch timeout')), 5000)
                     )
                 ]);
+                console.log(chalk.blue(`Initial liquidity for pool ${pool.id}: ${pool.liquidity}`));
             } catch (error) {
-                console.error(`Failed to fetch initial liquidity for pool ${pool.id}:`, error);
+                console.error(chalk.red(`Failed to fetch initial liquidity for pool ${pool.id}:`), error);
                 return;
             }
 
@@ -217,15 +222,15 @@ export class DirectPoolScanner {
             }
 
             if (validationA.isValid && validationB.isValid) {
+                console.log(chalk.green(`Pool ${pool.id} passed security validation`));
                 this.addToCache(pool);
                 await onPoolFound(pool);
-                console.log(`Successfully validated and processed pool ${pool.id}`);
             } else {
-                console.debug(`Pool ${pool.id} failed validation after ${validationAttempts} attempts:`,
+                console.warn(chalk.yellow(`Pool ${pool.id} failed validation after ${validationAttempts} attempts:`),
                     !validationA.isValid ? validationA.reason : validationB.reason);
             }
         } catch (error) {
-            console.error(`Error processing pool ${pool.id}:`, error);
+            console.error(chalk.red(`Error processing pool ${pool.id}:`), error);
         } finally {
             this.processingQueue.delete(pool.id);
         }
@@ -258,43 +263,53 @@ export class DirectPoolScanner {
         }
     }
 
-    private initializeWebSocket(onPoolFound: (pool: Pool) => Promise<void>) {
+    private async initializeWebSocket(onPoolFound: (pool: Pool) => Promise<void>) {
         if (!this.config.wsEndpoint || this.ws) return;
 
-        this.ws = new WebSocket(this.config.wsEndpoint);
+        try {
+            this.ws = new WebSocketWrapper(this.config.wsEndpoint);
 
-        this.ws.onopen = () => {
-            console.log('WebSocket connected');
-            if (this.ws) {
-                this.ws.send(JSON.stringify({
-                    jsonrpc: '2.0',
-                    id: 1,
-                    method: 'sui_subscribeBlock',
-                    params: []
-                }));
-            }
-        };
+            this.ws.onopen = () => {
+                console.log(chalk.green('WebSocket connected'));
+                if (this.ws) {
+                    this.ws.send(JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: 1,
+                        method: 'sui_subscribeBlock',
+                        params: []
+                    }));
+                }
+            };
 
-        this.ws.onmessage = async (event) => {
-            const data = JSON.parse(event.data);
-            if (data.method === 'sui_subscribeBlock') {
-                await this.scanAllDexes(onPoolFound);
-            }
-        };
+            this.ws.onmessage = async (data) => {
+                try {
+                    const parsedData = JSON.parse(data.toString());
+                    if (parsedData.method === 'sui_subscribeBlock') {
+                        await this.scanAllDexes(onPoolFound);
+                    }
+                } catch (error) {
+                    console.error(chalk.red('Error processing WebSocket message:'), error);
+                }
+            };
 
-        this.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
+            this.ws.onerror = (error) => {
+                console.error(chalk.red('WebSocket error:'), error);
+                this.handleWebSocketReconnect(onPoolFound);
+            };
+
+            this.ws.onclose = (code, reason) => {
+                console.log(chalk.yellow(`WebSocket disconnected (${code}): ${reason}`));
+                this.handleWebSocketReconnect(onPoolFound);
+            };
+        } catch (error) {
+            console.error(chalk.red('Error setting up WebSocket:'), error);
             this.handleWebSocketReconnect(onPoolFound);
-        };
-
-        this.ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            this.handleWebSocketReconnect(onPoolFound);
-        };
+        }
     }
 
     private handleWebSocketReconnect(onPoolFound: (pool: Pool) => Promise<void>) {
         if (!this.isScanning) return;
+        console.log(chalk.yellow('Attempting to reconnect WebSocket...'));
         setTimeout(() => this.initializeWebSocket(onPoolFound), 5000);
     }
 
