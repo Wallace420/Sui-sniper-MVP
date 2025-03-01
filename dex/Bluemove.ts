@@ -1,5 +1,5 @@
 import { Dex, Pool, populateLiquidity, populateMetadata } from './index';
-import { formatPoolDate, convertMYSTtoSUI } from '../utils';
+import { convertMYSTtoSUI, formatPoolDate } from '../utils';
 
 const Bluemove: Dex = {
     Name: 'Bluemove',

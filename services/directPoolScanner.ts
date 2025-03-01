@@ -4,7 +4,7 @@ import { Pool, Dex } from '../dex';
 import { TokenSecurity } from './tokenSecurity';
 import { MEVProtection } from './mevProtection';
 import chalk from 'chalk';
-import { WebSocketWrapper } from './websocket/WebSocketWrapper';
+import { WebSocketWrapper, EnhancedWebsocketClient } from './websocket/WebSocketWrapper';
 
 export interface DirectPoolScannerConfig {
     scanIntervalMs: number;
@@ -158,7 +158,7 @@ export class DirectPoolScanner {
                         try {
                             const liquidity = await Promise.race([
                                 dex.getLiquidity(pool.id),
-                                new Promise((_, reject) => 
+                                new Promise<string>((_, reject) => 
                                     setTimeout(() => reject(new Error('Liquidity fetch timeout')), 5000)
                                 )
                             ]);
@@ -190,12 +190,13 @@ export class DirectPoolScanner {
 
             // Get initial liquidity
             try {
-                pool.liquidity = await Promise.race([
+                const liquidityResult = await Promise.race([
                     dex.getLiquidity(pool.id),
-                    new Promise((_, reject) => 
+                    new Promise<string>((_, reject) => 
                         setTimeout(() => reject(new Error('Initial liquidity fetch timeout')), 5000)
                     )
                 ]);
+                pool.liquidity = liquidityResult;
                 console.log(chalk.blue(`Initial liquidity for pool ${pool.id}: ${pool.liquidity}`));
             } catch (error) {
                 console.error(chalk.red(`Failed to fetch initial liquidity for pool ${pool.id}:`), error);

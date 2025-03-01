@@ -1,7 +1,5 @@
-import { Dex, Pool, getLiquidity, populateLiquidity, populateMetadata } from './index';
-import { formatPoolDate, convertMYSTtoSUI } from '../utils';
-import { SuiClient } from '@mysten/sui/client';
-
+import { Dex, Pool, populateLiquidity, populateMetadata } from './index';
+import { convertMYSTtoSUI, formatPoolDate } from '../utils';
 
 const Turbos: Dex = {
     Name: 'Turbos',
@@ -66,8 +64,17 @@ const Turbos: Dex = {
             return [];
         }
     },
-    getLiquidity: async function (poolId: string) {
-        return await getLiquidity(this.Client, poolId);
+    getLiquidity: async function(poolId: string) {
+        try {
+            const ob: any = await this.Client.getObject({ id: poolId, options: { showContent: true }});
+            const content: any = ob.data.content;
+            const liq0 = content.fields.coin_b || content.fields.reserve_x;
+            const liquidity = convertMYSTtoSUI(liq0*2);
+            return liquidity;
+        } catch (error) {
+            console.error(`Error getting liquidity for pool ${poolId}:`, error);
+            return '0';
+        }
     },
     PoolIds: new Set<string>(),
     Client: undefined as any,
