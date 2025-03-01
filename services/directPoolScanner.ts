@@ -1,10 +1,9 @@
-import { SuiClient, SuiEventFilter } from '@mysten/sui/client';
-import { WebsocketClient } from '@mysten/sui/dist/cjs/client/rpc-websocket-client';
+import { SuiClient } from '@mysten/sui/client';
 import { Pool, Dex } from '../dex';
 import { TokenSecurity } from './tokenSecurity';
 import { MEVProtection } from './mevProtection';
 import chalk from 'chalk';
-import { WebSocketWrapper, EnhancedWebsocketClient } from './websocket/WebSocketWrapper';
+import { WebSocketWrapper } from './websocket/WebSocketWrapper';
 
 export interface DirectPoolScannerConfig {
     scanIntervalMs: number;
