@@ -187,14 +187,15 @@ export class DatabaseHelper {
 
       // Convert database record to Pool object
       const pool: Pool = {
-        id: dbPool.id,
-        poolId: dbPool.poolId,
-        dex: dbPool.dex,
-        coin_a: dbPool.coinA,
-        coin_b: dbPool.coinB,
-        liquidity: dbPool.liquidity,
-        poolCreated: dbPool.poolCreated.getTime(),
-        formattedDate: dbPool.poolCreated.toISOString()
+          id: dbPool.id,
+          poolId: dbPool.poolId,
+          dex: dbPool.dex,
+          coin_a: dbPool.coinA,
+          coin_b: dbPool.coinB,
+          liquidity: dbPool.liquidity,
+          poolCreated: dbPool.poolCreated.getTime(),
+          formattedDate: dbPool.poolCreated.toISOString(),
+          price: ''
       };
 
       // Update cache if enabled

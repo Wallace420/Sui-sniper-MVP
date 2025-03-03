@@ -120,6 +120,7 @@ const Cetus: Dex = {
 
 async function parseEventToPool(event: any, timestamp: number) {
     const pool: Pool = {
+        price: '0', 
         id: event.pool_id,
         poolId: event.pool_id,
         coin_a: `0x${event.coin_type_a}`,

@@ -34,6 +34,7 @@ export interface Dex {
  * Interface representing a liquidity pool
  */
 export interface Pool {
+    price: string;
     /** Unique identifier */
     id: string;
     /** Pool contract ID */

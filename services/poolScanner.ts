@@ -255,7 +255,8 @@ export class PoolScanner {
                 dex: dex.Name,
                 poolCreated: event.timestamp || Date.now(),
                 formattedDate: formatPoolDate(event.timestamp || Date.now()),
-                liquidity: '0'
+                liquidity: '0',
+                price: ''
             };
 
             try {

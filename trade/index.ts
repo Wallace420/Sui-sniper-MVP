@@ -9,7 +9,7 @@ export enum TradeStatus {
     Failed = "FAILED",
 }
 
-export interface Trade extends Pool {
+export interface Trade extends Omit<Pool, 'price'> {
     status: TradeStatus;
     created: number;
     opened: number;

@@ -74,6 +74,7 @@ const Bluemove: Dex = {
 
 async function parseEventToPool(event: any) {
     const pool: Pool = {
+        price: '0',
         id: event.pool_id,
         poolId: event.pool_id,
         coin_a: `0x${event.token_y_name}`,

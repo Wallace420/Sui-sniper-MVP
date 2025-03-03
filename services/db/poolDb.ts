@@ -90,7 +90,8 @@ export class PoolDatabase {
                 coin_b: dbPool.coinB,
                 liquidity: dbPool.liquidity,
                 poolCreated: dbPool.poolCreated.getTime(),
-                formattedDate: dbPool.poolCreated.toISOString()
+                formattedDate: dbPool.poolCreated.toISOString(),
+                price: '0' // Adding default price as required by Pool interface
             };
         } catch (error) {
             console.error('Error getting pool:', error);
