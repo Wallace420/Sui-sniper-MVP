@@ -214,50 +214,107 @@ export class RiskMetrics {
    * Initialize WebSocket connection for real-time data
    */
   private initializeWebSocket(): void {
-    if (!this.config.websocketEndpoint) return;
+    if (!this.config.websocketEndpoint) {
+      console.warn('No WebSocket endpoint provided, skipping initialization');
+      return;
+    }
     
-    this.ws = new WebSocketWrapper(this.config.websocketEndpoint);
-    
-    this.ws.onopen = () => {
-      console.log('WebSocket connection established for risk metrics');
-      this.subscribeToEvents();
-    };
-    
-    this.ws.onerror = (error) => {
-      console.error('WebSocket error in risk metrics:', error);
-    };
-    
-    this.ws.onclose = () => {
-      console.log('WebSocket connection closed for risk metrics');
-    };
+    try {
+      this.ws = new WebSocketWrapper(this.config.websocketEndpoint);
+      
+      // Set up event handlers using the correct interface
+      this.ws.onopen = (event: any) => {
+        console.log('WebSocket connection established for risk metrics');
+        this.subscribeToEvents();
+      };
+      
+      this.ws.onerror = (error: Error) => {
+        console.error('WebSocket error in risk metrics:', error);
+      };
+      
+      this.ws.onclose = (code: number, reason: string) => {
+        console.log(`WebSocket connection closed for risk metrics: Code ${code}, Reason: ${reason}`);
+        // Attempt to reconnect
+        setTimeout(() => this.initializeWebSocket(), 5000);
+      };
+      
+      // Add message handler if needed
+      this.ws.onmessage = (data: any) => {
+        // Process general messages if needed
+        // Most message handling will be done through subscriptions
+      };
+    } catch (error) {
+      console.error('Failed to initialize WebSocket:', error instanceof Error ? error.message : String(error));
+    }
   }
   
   /**
    * Subscribe to relevant blockchain events for real-time monitoring
    */
   private subscribeToEvents(): void {
-    if (!this.ws || !this.ws.isConnected()) return;
+    if (!this.ws || !this.ws.isConnected()) {
+      console.warn('WebSocket not connected, cannot subscribe to events');
+      return;
+    }
+    
+    // Define transaction event interface for better type safety
+    interface TransactionEvent {
+      transaction?: {
+        data?: {
+          transaction?: {
+            kind?: string;
+            inputs?: any[];
+          };
+          sender?: string;
+          function?: string;
+          arguments?: any[];
+        };
+        sender?: string;
+        kind?: string;
+      };
+      effects?: {
+        status?: {
+          status?: string;
+        };
+        effects?: any[];
+      };
+    }
     
     // Subscribe to transaction events for monitoring
-    this.ws.subscribe({
-      method: 'suix_subscribeTransaction',
-      params: [],
-      onMessage: (event: Record<string, unknown>) => this.handleTransactionEvent(event),
-      unsubscribe: 'suix_unsubscribeTransaction'
-    }).catch(error => {
-      console.error('Failed to subscribe to transaction events:', error);
-    });
+    try {
+      this.ws.subscribe<TransactionEvent>({
+        method: 'suix_subscribeTransaction',
+        params: [],
+        onMessage: (event: TransactionEvent) => this.handleTransactionEvent(event),
+        unsubscribe: 'suix_unsubscribeTransaction'
+      }).catch(error => {
+        console.error('Failed to subscribe to transaction events:', error instanceof Error ? error.message : String(error));
+      });
+      
+      console.log('Successfully subscribed to transaction events');
+    } catch (error) {
+      console.error('Error during subscription setup:', error instanceof Error ? error.message : String(error));
+    }
   }
   
   /**
    * Handle incoming transaction events for real-time analysis
    */
-  private handleTransactionEvent(event: Record<string, unknown>): void {
+  private handleTransactionEvent(event: any): void {
     // Process transaction events for real-time risk analysis
     // This would update caches and trigger alerts for suspicious activity
     try {
-      const txData = event?.transaction as Record<string, unknown> | undefined;
-      if (!txData) return;
+      if (!event || typeof event !== 'object') {
+        console.error('Invalid event data received');
+        return;
+      }
+
+      // Extract transaction data with proper type checking
+      const txData = event.transaction;
+      if (!txData) {
+        console.warn('No transaction data in event');
+        return;
+      }
       
       // Check for large transfers that might indicate whale activity
       if (txData.kind === 'TransferObject') {
@@ -265,39 +322,66 @@ export class RiskMetrics {
       }
       
       // Check for suspicious trading patterns
-      if (txData.kind === 'Call' && 
-          (txData.data as Record<string, unknown>)?.function?.toString().includes('swap')) {
-        this.checkForSuspiciousTrading(txData);
+      if (txData.data && typeof txData.data === 'object') {
+        // Handle function calls for swaps and liquidity changes
+        if (txData.kind === 'Call') {
+          const functionName = typeof txData.data.function === 'string' ? txData.data.function : '';
+          
+          if (functionName.includes('swap')) {
+            this.checkForSuspiciousTrading(txData);
+          }
+          
+          // Check for liquidity changes
+          if (functionName.includes('addLiquidity') || functionName.includes('removeLiquidity')) {
+            this.checkForLiquidityChanges(txData);
+          }
+        }
       }
       
-      // Check for liquidity changes
-      if (txData.kind === 'Call' && 
-          ((txData.data as Record<string, unknown>)?.function?.toString().includes('addLiquidity') || 
-           (txData.data as Record<string, unknown>)?.function?.toString().includes('removeLiquidity'))) {
-        this.checkForLiquidityChanges(txData);
+      // Handle programmable transactions
+      if (txData.kind === 'ProgrammableTransaction' && txData.data?.transaction) {
+        // Process programmable transaction data
+        // This would analyze the transaction inputs and commands
+        // For now, we'll log it for debugging
+        console.log('Received programmable transaction:', txData.data.transaction);
       }
     } catch (error) {
-      console.error('Error handling transaction event:', error);
+      console.error('Error handling transaction event:', error instanceof Error ? error.message : String(error));
     }
   }
   
   /**
    * Check for whale activity in transaction
    */
-  private checkForWhaleActivity(txData: Record<string, unknown>): void {
+  private checkForWhaleActivity(txData: any): void {
+    if (!txData || typeof txData !== 'object') {
+      console.error('Invalid transaction data for whale activity check');
+      return;
+    }
     try {
       // Extract transfer details
-      const transferData = txData.data as Record<string, unknown>;
-      if (!transferData) return;
+      if (!txData.data || typeof txData.data !== 'object') {
+        console.warn('No transfer data in transaction');
+        return;
+      }
       
-      const objectRef = transferData.objectRef as Record<string, unknown>;
-      if (!objectRef) return;
+      const transferData = txData.data;
+      
+      if (!transferData.objectRef || typeof transferData.objectRef !== 'object') {
+        console.warn('No object reference in transfer data');
+        return;
+      }
+      
+      const objectRef = transferData.objectRef;
       
       const objectId = objectRef.objectId as string;
       const recipient = transferData.recipient as string;
       const sender = txData.sender as string;
       
-      if (!objectId || !recipient || !sender) return;
+      if (!objectId || !recipient || !sender) {
+        console.warn('Missing required transfer data properties');
+        return;
+      }
       
       // Get token type and amount
       this.client.getObject({
@@ -305,17 +389,26 @@ export class RiskMetrics {
         options: { showContent: true, showType: true }
       }).then(objectData => {
         const type = objectData.data?.type as string;
-        if (!type || !type.includes('::coin::')) return;
+        if (!type || !type.includes('::coin::')) {
+          console.log(`Object ${objectId} is not a coin type: ${type}`);
+          return;
+        }
         
         // Extract token ID from type
         const tokenId = type.split('<')[1]?.split('>')[0];
-        if (!tokenId) return;
+        if (!tokenId) {
+          console.log(`Could not extract token ID from type: ${type}`);
+          return;
+        }
         
-        // Get token balance
-const fields = objectData.data?.content?.dataType === 'moveObject' ? 
-  (objectData.data.content as { fields: Record<string, unknown> }).fields :
-  {} as Record<string, unknown>;
+        // Get token balance with proper type checking
+        let fields: Record<string, unknown> = {};
+        if (objectData.data?.content?.dataType === 'moveObject') {
+          fields = (objectData.data.content as { fields: Record<string, unknown> }).fields || {};
+        }
+        
         const amount = BigInt(fields?.balance?.toString() || '0');
+        
         
         // Check if this is a significant transfer
         this.tokenAnalytics.getTokenHolderAnalysis(tokenId).then(holderData => {
@@ -359,7 +452,25 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
               whale.recentActivity.sells += 1;
               whale.recentActivity.netAmount -= Number(amount);
               whale.recentActivity.lastActivity = Date.now();
+            } else {
+              // Add new whale if not already tracked
+              whaleInfo.whales.push({
+                address: sender,
+                balance: amount,
+                percentage: percentage,
+                recentActivity: {
+                  buys: 0,
+                  sells: 1,
+                  netAmount: -Number(amount),
+                  lastActivity: Date.now()
+                }
+              });
             }
+            
+            // Update whale concentration
+            whaleInfo.whaleConcentration = whaleInfo.whales.reduce(
+              (sum, whale) => sum + whale.percentage, 0
+            );
             
             // Calculate risk score based on concentration and activity
             whaleInfo.whaleRiskScore = Math.min(
@@ -372,45 +483,77 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
             whaleInfo.lastUpdated = Date.now();
             this.whaleActivityCache.set(tokenId, whaleInfo);
             
-            console.log(`Detected whale activity for token ${tokenId}: ${percentage}% transfer`);
+            console.log(`Detected whale activity for token ${tokenId}: ${percentage.toFixed(2)}% transfer`);
           }
         }).catch(error => {
-          console.error('Error analyzing holder data for whale activity:', error);
+          console.error('Error analyzing holder data for whale activity:', 
+            error instanceof Error ? error.message : String(error));
         });
       }).catch(error => {
-        console.error('Error getting object data for whale activity check:', error);
+        console.error('Error getting object data for whale activity check:', 
+          error instanceof Error ? error.message : String(error));
       });
     } catch (error) {
-      console.error('Error checking for whale activity:', error);
+      console.error('Error checking for whale activity:', 
+        error instanceof Error ? error.message : String(error));
     }
   }
   
   /**
    * Check for suspicious trading patterns
    */
-  private checkForSuspiciousTrading(txData: Record<string, unknown>): void {
+  private checkForSuspiciousTrading(txData: any): void {
+    if (!txData || typeof txData !== 'object') {
+      console.error('Invalid transaction data for suspicious trading check');
+      return;
+    }
     try {
-      const callData = txData.data as Record<string, unknown>;
-      if (!callData) return;
+      const callData = txData.data;
+      if (!callData) {
+        console.warn('No call data in transaction');
+        return;
+      }
       
-      const functionName = callData.function as string;
-      const sender = txData.sender as string;
-      const arguments_ = callData.arguments as unknown[];
+      // Safely extract function name, sender and arguments with type checking
+      const functionName = typeof callData.function === 'string' ? callData.function : '';
+      const sender = typeof txData.sender === 'string' ? txData.sender : '';
+      const arguments_ = Array.isArray(callData.arguments) ? callData.arguments : [];
       
-      if (!functionName || !sender || !arguments_) return;
+      if (!functionName) {
+        console.warn('No function name in call data');
+        return;
+      }
       
-      // Extract token information from swap function
-      const tokenInType = arguments_[0] as string;
-      const tokenOutType = arguments_[1] as string;
+      if (!sender) {
+        console.warn('No sender in transaction data');
+        return;
+      }
+      
+      if (arguments_.length < 3) {
+        console.warn('Insufficient arguments for swap function');
+        return;
+      }
+      
+      // Extract token information from swap function with proper type checking
+      const tokenInType = typeof arguments_[0] === 'string' ? arguments_[0] : '';
+      const tokenOutType = typeof arguments_[1] === 'string' ? arguments_[1] : '';
       const amountIn = BigInt(arguments_[2]?.toString() || '0');
       
-      if (!tokenInType || !tokenOutType) return;
+      if (!tokenInType || !tokenOutType) {
+        console.warn('Invalid token types in swap function');
+        return;
+      }
       
       // Extract token IDs
       const tokenInId = tokenInType.split('<')[1]?.split('>')[0];
       const tokenOutId = tokenOutType.split('<')[1]?.split('>')[0];
       
-      if (!tokenInId || !tokenOutId) return;
+      if (!tokenInId || !tokenOutId) {
+        console.warn('Could not extract token IDs from type strings');
+        return;
+      }
+      
+      console.log(`Detected swap: ${tokenInId} -> ${tokenOutId}, amount: ${amountIn}`);
       
       // Check for wash trading patterns
       this.detectWashTrading(tokenInId, tokenOutId, sender, amountIn);
@@ -418,7 +561,8 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
       // Check for market manipulation
       this.detectMarketManipulation(tokenInId, tokenOutId, sender, amountIn);
     } catch (error) {
-      console.error('Error checking for suspicious trading:', error);
+      console.error('Error checking for suspicious trading:', 
+        error instanceof Error ? error.message : String(error));
     }
   }
   
@@ -431,6 +575,10 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
     sender: string,
     amount: bigint
   ): Promise<void> {
+    if (!tokenInId || !tokenOutId || !sender) {
+      console.error('Invalid parameters for wash trading detection');
+      return;
+    }
     try {
       // Get recent transactions by this sender
       const txResponse = await this.client.queryTransactionBlocks({
@@ -458,16 +606,16 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
         if (!input) continue;
         
         // Check if this is a swap transaction
-        const isSwap = input.some(i => 
-          (i as { type?: string }).type === 'pure' &&
-          ((i as { value?: unknown }).value?.toString()?.includes(tokenInId) || (i as { value?: unknown }).value?.toString()?.includes(tokenOutId))
+        const isSwap = input.some((i: any) => 
+          i.type === 'pure' &&
+          (i.value?.toString()?.includes(tokenInId) || i.value?.toString()?.includes(tokenOutId))
         );
         
         if (isSwap) {
           // Check for trading partners
-          const recipients = tx.effects?.effects
-            ?.filter(e => e.type.includes('::TransferObject'))
-            ?.map(e => e.parsedJson?.recipient as string);
+          const recipients = tx.effects
+            ?.filter(e => (e as any).type?.includes('::TransferObject'))
+            ?.map(e => (e as any).parsedJson?.recipient as string);
           
           if (recipients) {
             recipients.forEach(r => {
@@ -560,6 +708,10 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
     sender: string,
     amount: bigint
   ): Promise<void> {
+    if (!tokenInId || !tokenOutId || !sender) {
+      console.error('Invalid parameters for market manipulation detection');
+      return;
+    }
     try {
       // Get token volume data
       const volumeData = await this.tokenAnalytics.getTokenVolumeAnalysis(tokenInId);
@@ -593,15 +745,15 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
       if (txResponse.data && txResponse.data.length > 0) {
         // Check for spoofing (large orders that get canceled)
         const largeOrdersCanceled = txResponse.data.filter(tx => {
-          const input = tx.transaction?.data?.transaction?.inputs;
+          const input = (tx.transaction?.data?.transaction as any)?.inputs;
           const isCanceled = tx.effects?.status?.status === 'failure';
           
           if (!input || !isCanceled) return false;
           
           // Check if this was a large order
-          const orderSize = input
-            .find(i => i.type === 'pure' && typeof i.value === 'number')
-            ?.value as number;
+          const orderSize = (input
+            .find((i: any) => i.type === 'pure' && typeof i.value === 'number')
+            ?.value as number) || 0;
           
           return orderSize && orderSize > volumeData.volume24h * 0.05; // 5% of daily volume
         });
@@ -680,20 +832,44 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
   /**
    * Check for significant liquidity changes
    */
-  private async checkForLiquidityChanges(txData: Record<string, unknown>): Promise<void> {
+  private async checkForLiquidityChanges(txData: any): Promise<void> {
+    if (!txData || typeof txData !== 'object') {
+      console.error('Invalid transaction data for liquidity changes check');
+      return;
+    }
     try {
-      const callData = txData.data as Record<string, unknown>;
-      if (!callData) return;
+      const callData = txData.data;
+      if (!callData) {
+        console.warn('No call data in transaction');
+        return;
+      }
       
-      const functionName = callData.function as string;
-      const sender = txData.sender as string;
-      const arguments_ = callData.arguments as unknown[];
+      // Safely extract function name, sender and arguments with type checking
+      const functionName = typeof callData.function === 'string' ? callData.function : '';
+      const sender = typeof txData.sender === 'string' ? txData.sender : '';
+      const arguments_ = Array.isArray(callData.arguments) ? callData.arguments : [];
       
-      if (!functionName || !sender || !arguments_) return;
+      if (!functionName) {
+        console.warn('No function name in call data');
+        return;
+      }
       
-      // Extract pool ID and token information
-      const poolId = arguments_[0] as string;
-      if (!poolId) return;
+      if (!sender) {
+        console.warn('No sender in transaction data');
+        return;
+      }
+      
+      if (arguments_.length === 0) {
+        console.warn('No arguments for liquidity function');
+        return;
+      }
+      
+      // Extract pool ID and token information with proper type checking
+      const poolId = typeof arguments_[0] === 'string' ? arguments_[0] : '';
+      if (!poolId) {
+        console.warn('Invalid pool ID in liquidity function');
+        return;
+      }
       
       // Determine if this is adding or removing liquidity
       const isAddingLiquidity = functionName.includes('addLiquidity');
@@ -710,7 +886,7 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
       if (!poolData.data?.content) return;
       
       // Extract token IDs from pool
-      const fields = poolData.data.content.fields as Record<string, unknown>;
+      const fields = (poolData.data.content as any).fields as Record<string, unknown>;
       const coinTypeA = fields.coin_type_a as string;
       const coinTypeB = fields.coin_type_b as string;
       
@@ -729,7 +905,9 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
         coin_b: tokenBId,
         price: fields.price?.toString() || '0',
         liquidity: fields.liquidity?.toString() || '0',
-        id: poolId
+        id: poolId,
+        dex: 'unknown',
+        poolCreated: Date.now()
       });
       
       // Get or initialize stability info
@@ -851,7 +1029,7 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
       // For now, we'll use some heuristics based on the module name and fields
       
       const moduleName = type.split('::')[1];
-      const fields = tokenData.data.content.fields as Record<string, unknown>;
+      const fields = (tokenData.data.content as any).fields as Record<string, unknown>;
       
       // Check for common permission patterns
       const permissions = {
@@ -859,7 +1037,7 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
         canBurn: moduleName?.includes('burn') || !!fields.burn_cap,
         canPause: moduleName?.includes('pause') || !!fields.pause_cap,
         canUpgrade: packageData.data?.content?.dataType === 'package' && 
-                   !!(packageData.data.content.fields as Record<string, unknown>)?.upgrade_cap,
+                   !!((packageData.data.content as any).fields as Record<string, unknown>)?.upgrade_cap,
         hasBlacklist: moduleName?.includes('blacklist') || !!fields.deny_cap,
         hasFees: moduleName?.includes('fee') || !!fields.fee_config
       };
@@ -927,7 +1105,7 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
       // In a real implementation, this would check for liquidity lock contracts
       // For now, we'll check if the pool has any lock-related fields
       
-      const fields = poolData.data.content.fields as Record<string, unknown>;
+      const fields = (poolData.data.content as any).fields as Record<string, unknown>;
       
       // Check for lock-related fields
       const isLocked = !!fields.locked || !!fields.lock_expiry || !!fields.timelock;
@@ -978,6 +1156,78 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
   /**
    * Get comprehensive risk assessment for a token
    */
+  /**
+   * Analyze token ownership structure
+   */
+  async analyzeOwnership(tokenId: string): Promise<OwnershipAnalysis> {
+    // Check cache first
+    const cached = this.ownershipCache.get(tokenId);
+    if (cached && Date.now() - cached.lastUpdated < this.config.cacheTimeMs) {
+      return cached;
+    }
+    
+    try {
+      // Get token data
+      const tokenData = await this.client.getObject({
+        id: tokenId,
+        options: {
+          showContent: true,
+          showOwner: true
+        }
+      });
+      
+      if (!tokenData.data?.content) {
+        throw new Error('Token data not found');
+      }
+      
+      // Extract owner information
+      const owner = tokenData.data.owner;
+      const isRenounced = owner?.type === 'Immutable';
+      const hasMultiSig = owner?.type === 'Shared';
+      const adminCount = hasMultiSig ? 1 : isRenounced ? 0 : 1;
+      
+      // Calculate permission risk based on ownership structure
+      // Higher risk if single owner, lower if renounced or multi-sig
+      const permissionRisk = isRenounced ? 0 : hasMultiSig ? 3 : 8;
+      
+      const ownershipAnalysis: OwnershipAnalysis = {
+        tokenId,
+        creator: (owner?.AddressOwner || owner?.ObjectOwner || 'unknown') as string,
+        ownershipStructure: {
+          isRenounced,
+          hasMultiSig,
+          adminCount,
+          timelock: hasMultiSig ? 86400 : undefined // 24 hours if multi-sig
+        },
+        permissionRisk,
+        lastUpdated: Date.now()
+      };
+      
+      // Update cache
+      this.ownershipCache.set(tokenId, ownershipAnalysis);
+      
+      return ownershipAnalysis;
+    } catch (error) {
+      console.error(`Error analyzing ownership for token ${tokenId}:`, error instanceof Error ? error.message : String(error));
+      
+      // Return a default analysis with high risk when error occurs
+      const defaultAnalysis: OwnershipAnalysis = {
+        tokenId,
+        creator: 'unknown',
+        ownershipStructure: {
+          isRenounced: false,
+          hasMultiSig: false,
+          adminCount: 1
+        },
+        permissionRisk: 10, // Maximum risk when can't verify
+        lastUpdated: Date.now()
+      };
+      
+      this.ownershipCache.set(tokenId, defaultAnalysis);
+      return defaultAnalysis;
+    }
+  }
+  
   async getComprehensiveRiskAssessment(tokenId: string, poolId?: string): Promise<{
     overallRisk: number;
     securityRisks: Record<string, number>;
@@ -1010,7 +1260,7 @@ const fields = objectData.data?.content?.dataType === 'moveObject' ?
         permissionRisk: permissions.riskLevel / 10, // Normalize to 0-1
         ownershipRisk: ownership.permissionRisk / 10,
         liquidityLockRisk: liquidityLock ? 
-          (1 - liquidityLock.lockedPercentage / 100)
+          (1 - liquidityLock.lockedPercentage / 100) : 1.0,
         auditRisk: 0.7 // Default to high risk until audit system is implemented
       };
       
