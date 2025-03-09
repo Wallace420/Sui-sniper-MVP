@@ -170,13 +170,181 @@ export class TokenSecurity {
     }
 
     private async getLiquidityInfo(tokenData: SuiObjectResponse): Promise<number> {
-        // Implement liquidity check logic
-        return 1000; // Placeholder
+        try {
+            const moveObject = tokenData.data?.content as SuiMoveObject;
+            const fields = moveObject?.fields as Record<string, any>;
+            const tokenType = tokenData.data?.type as string;
+            
+            if (!tokenType) {
+                return 0;
+            }
+
+            // Query pools that contain this token
+            // We'll look for both Cetus and BluemoveSwap pools
+            const cetusPoolEvents = await this.client.queryEvents({
+                query: {
+                    MoveEventType: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb::pool::AddLiquidityEvent'
+                },
+                limit: 50
+            });
+
+            const bluemovePoolEvents = await this.client.queryEvents({
+                query: {
+                    MoveEventType: '0xb24b6789e088b876afabca733bed2299fbc9e2d6369be4d1acfa17d8145454d9::swap::Add_Liquidity_Pool'
+                },
+                limit: 50
+            });
+
+            // Process pool events to find liquidity for this token
+            let totalLiquidity = 0;
+            
+            // Process Cetus pools
+            for (const event of cetusPoolEvents.data) {
+                const parsedJson = event.parsedJson as Record<string, any>;
+                const coinA = parsedJson.coin_a_type;
+                const coinB = parsedJson.coin_b_type;
+                
+                if (coinA === tokenType || coinB === tokenType) {
+                    // Found a pool with our token
+                    const poolId = parsedJson.pool_id;
+                    
+                    // Get pool details
+                    const poolData = await this.client.getObject({
+                        id: poolId,
+                        options: {
+                            showContent: true
+                        }
+                    });
+                    
+                    const poolObject = poolData.data?.content as SuiMoveObject;
+                    const poolFields = poolObject?.fields as Record<string, any>;
+                    
+                    // Extract liquidity value
+                    const liquidity = poolFields?.liquidity ? 
+                        parseFloat(poolFields.liquidity) : 
+                        (poolFields?.lp_supply ? parseFloat(poolFields.lp_supply) : 0);
+                    
+                    totalLiquidity += liquidity;
+                }
+            }
+            
+            // Process BluemoveSwap pools
+            for (const event of bluemovePoolEvents.data) {
+                const parsedJson = event.parsedJson as Record<string, any>;
+                const coinA = parsedJson.coin_a_type || parsedJson.coinTypeA;
+                const coinB = parsedJson.coin_b_type || parsedJson.coinTypeB;
+                
+                if (coinA === tokenType || coinB === tokenType) {
+                    // Found a pool with our token
+                    const poolId = parsedJson.pool_id || parsedJson.poolId;
+                    
+                    // Get pool details
+                    const poolData = await this.client.getObject({
+                        id: poolId,
+                        options: {
+                            showContent: true
+                        }
+                    });
+                    
+                    const poolObject = poolData.data?.content as SuiMoveObject;
+                    const poolFields = poolObject?.fields as Record<string, any>;
+                    
+                    // Extract liquidity value
+                    const liquidity = poolFields?.liquidity ? 
+                        parseFloat(poolFields.liquidity) : 
+                        (poolFields?.lp_supply ? parseFloat(poolFields.lp_supply) : 0);
+                    
+                    totalLiquidity += liquidity;
+                }
+            }
+            
+            return Math.max(totalLiquidity, 0);
+        } catch (error) {
+            console.error('Error getting liquidity info:', error);
+            return 0; // Return 0 liquidity on error
+        }
     }
 
     private async getHoldersInfo(tokenData: SuiObjectResponse): Promise<{ count: number; maxOwnershipPercent: number }> {
-        // Implement holders analysis logic
-        return { count: 20, maxOwnershipPercent: 30 }; // Placeholder
+        try {
+            const moveObject = tokenData.data?.content as SuiMoveObject;
+            const fields = moveObject?.fields as Record<string, any>;
+            const tokenType = tokenData.data?.type as string;
+            
+            if (!tokenType) {
+                return { count: 0, maxOwnershipPercent: 100 };
+            }
+
+            // Query token holders
+            // In a production environment, this would use an indexer or specialized API
+            // to get all token holders. For now, we'll query recent transfers to estimate holders.
+            const transferEvents = await this.client.queryEvents({
+                query: {
+                    MoveEventType: `${tokenType}::transfer::TransferEvent`
+                },
+                limit: 100
+            });
+
+            // Extract unique addresses from transfer events
+            const holderAddresses = new Set<string>();
+            const balances = new Map<string, bigint>();
+            let totalSupply = BigInt(0);
+
+            // Process transfer events to build a simplified holder list
+            for (const event of transferEvents.data) {
+                const parsedJson = event.parsedJson as Record<string, any>;
+                const from = parsedJson.from;
+                const to = parsedJson.to;
+                const amount = BigInt(parsedJson.amount || '0');
+
+                if (from) holderAddresses.add(from);
+                if (to) holderAddresses.add(to);
+
+                // Update balances (simplified estimation)
+                if (from) {
+                    const currentBalance = balances.get(from) || BigInt(0);
+                    balances.set(from, currentBalance - amount);
+                }
+
+                if (to) {
+                    const currentBalance = balances.get(to) || BigInt(0);
+                    balances.set(to, currentBalance + amount);
+                }
+
+                // Add to total supply (this is a simplification)
+                totalSupply += amount;
+            }
+
+            // If we couldn't find any transfer events, try to get total supply from token data
+            if (totalSupply === BigInt(0)) {
+                totalSupply = BigInt(fields?.total_supply || fields?.supply || '0');
+            }
+
+            // Calculate max ownership percentage
+            let maxOwnership = 0;
+            if (totalSupply > BigInt(0)) {
+                for (const [_, balance] of balances) {
+                    if (balance <= BigInt(0)) continue;
+                    const percentage = Number((balance * BigInt(100)) / totalSupply);
+                    maxOwnership = Math.max(maxOwnership, percentage);
+                }
+            } else {
+                maxOwnership = 100; // Default to 100% if we can't determine supply
+            }
+
+            // Filter out addresses with zero or negative balance
+            const validHolders = Array.from(balances.entries())
+                .filter(([_, balance]) => balance > BigInt(0));
+
+            return {
+                count: Math.max(validHolders.length, 1), // At least 1 holder
+                maxOwnershipPercent: maxOwnership
+            };
+        } catch (error) {
+            console.error('Error getting holders info:', error);
+            // Return conservative defaults on error
+            return { count: 1, maxOwnershipPercent: 100 };
+        }
     }
 
     clearCache() {
