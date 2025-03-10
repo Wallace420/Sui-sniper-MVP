@@ -1,7 +1,5 @@
 import { Pool } from '../dex';
-import { Database } from 'sqlite3';
-import { open, Database as SQLiteDB } from 'sqlite';
-
+import Datastore from 'nedb-promises';
 export interface PoolDatabaseConfig {
     dbPath: string;
     syncIntervalMs?: number;

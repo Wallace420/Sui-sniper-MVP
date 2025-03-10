@@ -119,6 +119,7 @@ interface SocialAnalyticsCache {
 
 // SocialAnalytics class with all methods restored
 export class SocialAnalytics {
+  [x: string]: any;
   getCommunityEngagement(coin_a: string) {
       throw new Error('Method not implemented.');
   }

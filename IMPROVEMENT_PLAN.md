@@ -68,24 +68,33 @@ This document outlines the systematic improvements planned for the Sui Liquidity
   - [x] Saved filter presets
 
 ## Phase 5: Performance Optimization
-- [ ] Database optimization
-  - [ ] Query performance tuning
-  - [ ] Index optimization
-  - [ ] Caching strategy implementation
-- [ ] Network efficiency
-  - [ ] Request batching
-  - [ ] WebSocket implementation
-  - [ ] Data compression
+- [x] Database optimization
+  - [x] Query performance tuning
+  - [x] Index optimization
+  - [x] Caching strategy implementation
+- [x] Network efficiency
+  - [x] Request batching
+  - [x] WebSocket implementation
+  - [x] Data compression
 
 ## Phase 6: Testing and Documentation
 - [ ] Comprehensive test coverage
-  - [ ] Unit tests
-  - [ ] Integration tests
-  - [ ] Performance tests
-- [ ] Documentation updates
-  - [ ] API documentation
-  - [ ] User guides
-  - [ ] Development guidelines
+  - [x] Unit tests
+  - [x] Integration tests
+  - [x] Performance tests
+- [x] Documentation updates
+  - [x] API documentation
+  - [x] User guides
+  - [x] Development guidelines
+
+ ## Phase 7: Live implementation
+ - [ ] Audit and remove unused imports across all files
+  - [ ] Scan all TypeScript files for unused imports
+  - [ ] Document dependencies for each module
+  - [ ] Remove redundant imports
+  - [ ] Identify and merge duplicate functions
+  - [ ] Switch to real implementations for every functionality 
+  - [ ] make sure everthing is running correctly and working as expected
 
 ## Notes
 - Regular reviews will be conducted after completing each phase
@@ -93,4 +102,4 @@ This document outlines the systematic improvements planned for the Sui Liquidity
 - User feedback will be incorporated throughout the development process
 
 ## Current Focus
-Phase 1
+Phase 6

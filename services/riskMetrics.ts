@@ -1,8 +1,27 @@
 import { SuiClient } from '@mysten/sui/client';
+import { TransactionEffects, SuiTransactionBlockKind } from '@mysten/sui/client';
 import { TokenSecurity } from './tokenSecurity';
 import { LiquidityAnalytics } from './analytics/liquidityAnalytics';
 import { TokenAnalytics } from './analytics/tokenAnalytics';
 import { WebSocketWrapper } from './websocket/WebSocketWrapper';
+
+interface ExtendedTransactionEffect extends TransactionEffects {
+  type?: string;
+  parsedJson?: {
+    recipient: string;
+  };
+}
+
+interface ExtendedObjectOwner {
+  type?: 'Immutable' | 'Shared' | 'AddressOwner' | 'ObjectOwner';
+  AddressOwner?: string;
+  ObjectOwner?: string;
+}
+
+interface TransactionInput {
+  type: string;
+  value: unknown;
+}
 
 /**
  * Interface for token audit status information
@@ -614,24 +633,25 @@ export class RiskMetrics {
         if (isSwap) {
           // Check for trading partners
           const recipients = tx.effects
-            ?.filter(e => (e as any).type?.includes('::TransferObject'))
-            ?.map(e => (e as any).parsedJson?.recipient as string);
+            ? (tx.effects as unknown as ExtendedTransactionEffect[]).filter((e: ExtendedTransactionEffect) => e.type?.includes('::TransferObject'))
+              .map((e: ExtendedTransactionEffect) => e.parsedJson?.recipient)
+            : undefined;
           
           if (recipients) {
-            recipients.forEach(r => {
+            recipients.forEach((r: string | undefined) => {
               if (r && r !== sender) tradingPartners.add(r);
             });
             
             // Self-trading check
-            if (recipients.every(r => r === sender)) {
+            if (recipients.every((r: string | undefined) => r === sender)) {
               selfTrades++;
             }
           }
           
           // Check for uniform trade amounts
           const tradeAmount = input
-            .find(i => i.type === 'pure' && typeof i.value === 'number')
-            ?.value?.toString();
+            .find((i: any) => i.type === 'pure' && typeof i.value === 'number')
+            ?.['value']?.toString();
           
           if (tradeAmount) {
             tradeAmounts.add(tradeAmount);
@@ -763,7 +783,7 @@ export class RiskMetrics {
         // Check for layering (multiple orders at different price levels)
         const uniquePriceLevels = new Set<number>();
         txResponse.data.forEach(tx => {
-          const input = tx.transaction?.data?.transaction?.inputs;
+          const input = (tx.transaction?.data?.transaction as SuiTransactionBlockKind & { inputs?: TransactionInput[] })?.inputs;
           if (!input) return;
           
           const priceLevel = input
@@ -1181,7 +1201,7 @@ export class RiskMetrics {
       }
       
       // Extract owner information
-      const owner = tokenData.data.owner;
+      const owner = tokenData.data.owner as ExtendedObjectOwner;
       const isRenounced = owner?.type === 'Immutable';
       const hasMultiSig = owner?.type === 'Shared';
       const adminCount = hasMultiSig ? 1 : isRenounced ? 0 : 1;
