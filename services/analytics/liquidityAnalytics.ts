@@ -1,6 +1,5 @@
-import { SuiClient } from '@mysten/sui/client';
+import { MockSuiClientMethods } from '../../tests/test-utils';
 import { Pool } from '../../dex';
-import Decimal from 'decimal.js';
 
 export interface LiquidityDepthAnalysis {
   poolId: string;
@@ -38,11 +37,11 @@ interface LiquidityAnalyticsCache {
 }
 
 export class LiquidityAnalytics {
-  private client: SuiClient;
+  private client: MockSuiClientMethods;
   private cache: LiquidityAnalyticsCache = {};
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-  constructor(client: SuiClient) {
+ 
+  constructor(client: MockSuiClientMethods) {
     this.client = client;
   }
 

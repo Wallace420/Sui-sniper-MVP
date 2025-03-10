@@ -50,3 +50,6 @@ export function formatPoolDate(timestamp: number): string {
 export function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// Performance optimization utilities (Phase 5)
+export * from './optimizationIndex';

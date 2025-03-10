@@ -102,4 +102,4 @@ This document outlines the systematic improvements planned for the Sui Liquidity
 - User feedback will be incorporated throughout the development process
 
 ## Current Focus
-Phase 6
+Phase 1

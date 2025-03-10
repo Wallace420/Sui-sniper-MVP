@@ -35,6 +35,7 @@ interface TokenAnalyticsCache {
 }
 
 export class TokenAnalytics {
+  [x: string]: any;
   private client: SuiClient;
   private cache: TokenAnalyticsCache = {};
   private readonly CACHE_DURATION = 15 * 60 * 1000;

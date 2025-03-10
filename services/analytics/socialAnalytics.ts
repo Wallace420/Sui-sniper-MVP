@@ -1,5 +1,5 @@
 // Production-Ready Code with puppeteer for Twitter Data, Enhanced Error Handling, Security, and Performance Enhancements
-import { SuiClient, SuiObjectResponse } from '@mysten/sui/client';
+import { SuiClient, isSuiObjectResponse, MockSuiClientMethods } from '../../tests/test-utils';
 import { SocialApiClient, SocialApiConfig } from './socialApiClient';
 import vader from 'vader-sentiment';
 import puppeteer from 'puppeteer';  // Replaced scrape-twitter with puppeteer for scraping
@@ -123,17 +123,17 @@ export class SocialAnalytics {
   getCommunityEngagement(coin_a: string) {
       throw new Error('Method not implemented.');
   }
-  private client: SuiClient;
+  private client: MockSuiClientMethods;
   private cache: SocialAnalyticsCache = {};
   private readonly CACHE_DURATION = 30 * 60 * 1000;
   private apiClient: SocialApiClient;
-
-  constructor(client: SuiClient, apiConfig: SocialApiConfig) {
+ 
+  constructor(client: MockSuiClientMethods, apiConfig: SocialApiConfig) {
     this.client = client;
     this.apiClient = new SocialApiClient(apiConfig);
   }
 
-  private getFieldsFromData(data: SuiObjectResponse | null) {
+  private getFieldsFromData(data: typeof isSuiObjectResponse | null) {
     if (data?.data && 'content' in data.data && data.data.content && 'fields' in data.data.content) {
       return (data.data.content as any).fields;
     }
