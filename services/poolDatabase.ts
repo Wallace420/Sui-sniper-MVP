@@ -1,7 +1,8 @@
 import { Pool } from '../dex';
-import Datastore from 'nedb-promises';
+import { PrismaClient } from '@prisma/client';
+
 export interface PoolDatabaseConfig {
-    dbPath: string;
+    prismaClient: PrismaClient;
     syncIntervalMs?: number;
     maxCacheSize?: number;
 }
@@ -18,40 +19,21 @@ interface CachedPool {
 }
 
 export class PoolDatabase {
-    private db: SQLiteDB | null = null;
+    private prisma: PrismaClient;
     private cache: Map<string, CachedPool> = new Map();
     private config: Required<PoolDatabaseConfig>;
 
     constructor(config: PoolDatabaseConfig) {
+        this.prisma = config.prismaClient;
         this.config = {
-            dbPath: config.dbPath,
+            prismaClient: config.prismaClient,
             syncIntervalMs: config.syncIntervalMs || 5000,
             maxCacheSize: config.maxCacheSize || 1000
         };
     }
 
     async initialize(): Promise<void> {
-        this.db = await open({
-            filename: this.config.dbPath,
-            driver: Database
-        });
-
-        await this.db.exec(`
-            CREATE TABLE IF NOT EXISTS pools (
-                id TEXT PRIMARY KEY,
-                dex TEXT NOT NULL,
-                token0 TEXT NOT NULL,
-                token1 TEXT NOT NULL,
-                created_at INTEGER NOT NULL,
-                last_checked INTEGER NOT NULL,
-                validation_attempts INTEGER DEFAULT 0,
-                is_valid BOOLEAN DEFAULT 0,
-                metadata TEXT
-            )
-        `);
-
-        // Start periodic sync
-        setInterval(() => this.syncCache(), this.config.syncIntervalMs);
+        // No initialization needed for Prisma in this class
     }
 
     async addPool(pool: Pool, isValid: boolean = false): Promise<void> {
@@ -71,7 +53,9 @@ export class PoolDatabase {
         // Maintain cache size
         if (this.cache.size > this.config.maxCacheSize) {
             const oldestKey = this.cache.keys().next().value;
-            this.cache.delete(oldestKey);
+            if (oldestKey) {
+                this.cache.delete(oldestKey);
+            }
         }
     }
 
@@ -91,61 +75,60 @@ export class PoolDatabase {
         if (cachedPool) return cachedPool;
 
         // If not in cache, check database
-        if (this.db) {
-            const row = await this.db.get(
-                'SELECT * FROM pools WHERE id = ?',
-                [poolId]
-            );
+        const dbPool = await this.prisma.pool.findUnique({
+            where: { poolId: poolId }
+        });
 
-            if (row) {
-                const pool: CachedPool = {
-                    id: row.id,
-                    dex: row.dex,
-                    token0: row.token0,
-                    token1: row.token1,
-                    lastChecked: row.last_checked,
-                    validationAttempts: row.validation_attempts,
-                    isValid: Boolean(row.is_valid),
-                    ...JSON.parse(row.metadata)
-                };
-                this.cache.set(poolId, pool);
-                return pool;
-            }
+        if (dbPool) {
+            const pool: CachedPool = {
+                id: dbPool.id,
+                dex: dbPool.dex,
+                token0: dbPool.coinA,
+                token1: dbPool.coinB,
+                lastChecked: dbPool.lastChecked.getTime(),
+                validationAttempts: dbPool.validationAttempts,
+                isValid: dbPool.isValid,
+                metadata: JSON.parse(dbPool.metadata as string) // Assuming metadata is stored as JSON string
+            };
+            this.cache.set(poolId, pool);
+            return pool;
         }
 
         return null;
     }
 
     private async syncCache(): Promise<void> {
-        if (!this.db) return;
-
-        const stmt = await this.db.prepare(`
-            INSERT OR REPLACE INTO pools (
-                id, dex, token0, token1, created_at, last_checked,
-                validation_attempts, is_valid, metadata
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
+        // Sync cache to database (using Prisma)
         for (const [_, pool] of this.cache) {
-            const { id, dex, token0, token1, lastChecked, validationAttempts, isValid, ...metadata } = pool;
-            await stmt.run(
-                id,
-                dex,
-                token0,
-                token1,
-                Date.now(),
-                lastChecked,
-                validationAttempts,
-                isValid ? 1 : 0,
-                JSON.stringify(metadata)
-            );
+            await this.prisma.pool.upsert({
+                where: { poolId: pool.id },
+                update: {
+                    dex: pool.dex,
+                    coinA: pool.token0,
+                    coinB: pool.token1,
+                    lastChecked: new Date(pool.lastChecked),
+                    validationAttempts: pool.validationAttempts,
+                    isValid: pool.isValid,
+                    metadata: JSON.stringify(pool.metadata)
+                },
+                create: {
+                    id: pool.id,
+                    poolId: pool.id, // Using pool.id as poolId
+                    dex: pool.dex,
+                    coinA: pool.token0,
+                    coinB: pool.token1,
+                    created: new Date(),
+                    lastChecked: new Date(pool.lastChecked),
+                    validationAttempts: pool.validationAttempts,
+                    isValid: pool.isValid,
+                    metadata: JSON.stringify(pool.metadata)
+                }
+            });
         }
-
-        await stmt.finalize();
     }
 
     async close(): Promise<void> {
         await this.syncCache();
-        if (this.db) await this.db.close();
+        await this.prisma.$disconnect();
     }
 }

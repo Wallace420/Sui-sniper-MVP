@@ -17,7 +17,7 @@ interface TokenValidationCache {
     };
 }
 
-interface ValidationResult {
+export interface ValidationResult {
     isValid: boolean;
     riskScore: number;
     reason?: string;

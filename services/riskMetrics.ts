@@ -651,7 +651,7 @@ export class RiskMetrics {
           // Check for uniform trade amounts
           const tradeAmount = input
             .find((i: any) => i.type === 'pure' && typeof i.value === 'number')
-            ?.['value']?.toString();
+            ?.value?.toString();
           
           if (tradeAmount) {
             tradeAmounts.add(tradeAmount);
