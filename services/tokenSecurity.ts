@@ -42,7 +42,7 @@ export class TokenSecurity {
         };
     }
 
-    async validateToken(tokenId: string): Promise<ValidationResult> {
+    async validateToken(tokenId: string, options?: { useAnalytics?: boolean; analytics?: any }): Promise<ValidationResult> {
         try {
             // Check cache first
             const cachedResult = this.validationCache[tokenId];

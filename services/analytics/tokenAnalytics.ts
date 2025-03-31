@@ -1,4 +1,4 @@
-import { SuiClient, SuiObjectResponse } from '@mysten/sui/client';
+import { SuiClient, SuiObjectResponse, TokenMetadata } from '../../types/sui-sdk';
 
 export interface TokenHolderAnalysis {
   tokenId: string;

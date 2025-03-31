@@ -1,4 +1,4 @@
-import { MockSuiClientMethods } from '../../tests/test-utils';
+import { SuiClient, SuiObjectResponse, PoolData } from '../../types/sui-sdk';
 import { Pool } from '../../dex';
 
 export interface LiquidityDepthAnalysis {
@@ -37,208 +37,192 @@ interface LiquidityAnalyticsCache {
 }
 
 export class LiquidityAnalytics {
-  private client: MockSuiClientMethods;
+  private client: SuiClient;
   private cache: LiquidityAnalyticsCache = {};
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
  
-  constructor(client: MockSuiClientMethods) {
+  constructor(client: SuiClient) {
     this.client = client;
   }
 
   /**
    * Analyzes liquidity depth and price impact for a specific pool
    * @param pool The pool to analyze
-   * @returns LiquidityDepthAnalysis with depth and price impact metrics
    */
   async analyzeLiquidityDepth(pool: Pool): Promise<LiquidityDepthAnalysis> {
+    const poolId = pool.poolId;
+    
     // Check cache first
-    if (
-      this.cache[pool.poolId] &&
-      Date.now() - this.cache[pool.poolId].timestamp < this.CACHE_DURATION
-    ) {
-      return this.cache[pool.poolId].analysis;
+    if (this.cache[poolId] && Date.now() - this.cache[poolId].timestamp < this.CACHE_DURATION) {
+      return this.cache[poolId].analysis;
     }
-
+    
     try {
-      // Get detailed pool data
+      // Fetch pool data
       const poolData = await this.client.getObject({
-        id: pool.poolId,
-        options: {
-          showContent: true,
-          showDisplay: true,
-        },
+        id: poolId,
+        options: { showContent: true }
       });
-
-      // Calculate liquidity depth levels
-      const depthLevels = await this.calculateLiquidityDepth(pool);
+      
+      if (!poolData.data || !poolData.data.content) {
+        throw new Error(`Pool data not found for ${poolId}`);
+      }
+      
+      // Extract pool fields
+      const fields = this.getFieldsFromData(poolData as SuiObjectResponse);
+      if (!fields) {
+        throw new Error(`Could not extract fields from pool ${poolId}`);
+      }
+      
+      // Extract reserves
+      const reserveA = BigInt(fields.reserve_a || '0');
+      const reserveB = BigInt(fields.reserve_b || '0');
+      
+      if (reserveA === BigInt(0) || reserveB === BigInt(0)) {
+        throw new Error(`Pool ${poolId} has zero reserves`);
+      }
+      
+      // Calculate current price
+      const currentPrice = Number(reserveB) / Number(reserveA);
+      
+      // Generate depth levels
+      const depthLevels = this.generateDepthLevels(currentPrice, Number(reserveA), Number(reserveB));
       
       // Calculate price impact for different trade sizes
-      const priceImpact = await this.calculatePriceImpact(pool);
+      const priceImpact = this.calculatePriceImpact(Number(reserveA), Number(reserveB), currentPrice);
       
       // Calculate concentration score
       const concentrationScore = this.calculateConcentrationScore(depthLevels);
-
+      
+      // Create analysis result
       const analysis: LiquidityDepthAnalysis = {
-        poolId: pool.poolId,
+        poolId,
         tokenAId: pool.coin_a,
         tokenBId: pool.coin_b,
-        totalLiquidity: parseFloat(pool.liquidity || '0'),
+        totalLiquidity: Number(reserveA) * currentPrice + Number(reserveB),
         depth: depthLevels,
         priceImpact,
         concentrationScore,
-        lastUpdated: Date.now(),
+        lastUpdated: Date.now()
       };
-
-      // Update cache
-      this.cache[pool.poolId] = {
+      
+      // Cache the result
+      this.cache[poolId] = {
         analysis,
-        timestamp: Date.now(),
+        timestamp: Date.now()
       };
-
+      
       return analysis;
     } catch (error) {
-      console.error(`Error analyzing liquidity depth for pool ${pool.poolId}:`, error);
-      throw new Error(`Failed to analyze liquidity depth: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(`Error analyzing liquidity depth for pool ${poolId}:`, error);
+      throw new Error(`Failed to analyze liquidity depth: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-
-  /**
-   * Calculates the price impact of a trade for a given pool
-   * @param pool The pool to analyze
-   * @param tradeAmount The amount to trade
-   * @param isBuy Whether the trade is a buy or sell
-   * @returns The price impact as a percentage
-   */
-  async calculateTradeImpact(pool: Pool, tradeAmount: number, isBuy: boolean): Promise<number> {
-    try {
-      // In a real implementation, this would use the pool's math to calculate price impact
-      // For now, we'll use a simplified model
-      
-      const liquidity = parseFloat(pool.liquidity || '0');
-      if (liquidity === 0) return 100; // Maximum impact if no liquidity
-      
-      // Simple model: impact = (tradeAmount / liquidity) * constant
-      // The constant can be adjusted based on the pool type and other factors
-      const impactFactor = isBuy ? 2 : 1.8; // Buys often have slightly higher impact
-      const impact = (tradeAmount / liquidity) * 100 * impactFactor;
-      
-      // Cap at 100%
-      return Math.min(impact, 100);
-    } catch (error) {
-      console.error(`Error calculating trade impact for pool ${pool.poolId}:`, error);
-      throw new Error(`Failed to calculate trade impact: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  
+  private getFieldsFromData(data: SuiObjectResponse) {
+    if (data?.data?.content && 'fields' in data.data.content) {
+      return (data.data.content as any).fields;
     }
+    return null;
   }
-
-  /**
-   * Calculates liquidity depth at different price levels
-   * Note: This is a placeholder implementation.
-   */
-  private async calculateLiquidityDepth(pool: Pool): Promise<LiquidityDepthLevel[]> {
-    // In a real implementation, this would analyze the pool's reserves at different price levels
-    // For now, return mock data representing liquidity at different price points
+  
+  private generateDepthLevels(currentPrice: number, reserveA: number, reserveB: number): LiquidityDepthLevel[] {
+    const levels: LiquidityDepthLevel[] = [];
+    const totalLiquidity = reserveA * currentPrice + reserveB;
     
-    const totalLiquidity = parseFloat(pool.liquidity || '0');
-    const currentPrice = parseFloat(pool.price || '0');
-    
-    if (totalLiquidity === 0 || currentPrice === 0) {
-      return [];
-    }
-    
-    // Create mock depth levels at different price points
-    const depthLevels: LiquidityDepthLevel[] = [];
-    const pricePoints = [-5, -2, -1, -0.5, 0, 0.5, 1, 2, 5]; // Percentage change from current price
-    
-    for (const pctChange of pricePoints) {
-      const priceLevel = currentPrice * (1 + pctChange / 100);
+    // Generate 10 price levels (5 above, 5 below current price)
+    for (let i = -5; i <= 5; i++) {
+      if (i === 0) continue; // Skip current price level
       
-      // Liquidity tends to be concentrated near the current price
-      let liquidityPct: number;
-      if (pctChange === 0) {
-        liquidityPct = 0.25; // 25% at current price
-      } else if (Math.abs(pctChange) <= 1) {
-        liquidityPct = 0.15; // 15% near current price
-      } else if (Math.abs(pctChange) <= 2) {
-        liquidityPct = 0.1; // 10% a bit further
-      } else {
-        liquidityPct = 0.05; // 5% at extreme price levels
-      }
+      const priceLevel = currentPrice * (1 + i * 0.05); // 5% increments
+      const liquidityAtLevel = this.calculateLiquidityAtPrice(priceLevel, reserveA, reserveB, currentPrice);
       
-      depthLevels.push({
+      levels.push({
         priceLevel,
-        liquidityAmount: totalLiquidity * liquidityPct,
-        percentOfTotal: liquidityPct * 100,
+        liquidityAmount: liquidityAtLevel,
+        percentOfTotal: (liquidityAtLevel / totalLiquidity) * 100
       });
     }
     
-    return depthLevels;
+    return levels;
   }
-
-  /**
-   * Calculates price impact for different trade sizes
-   * Note: This is a placeholder implementation.
-   */
-  private async calculatePriceImpact(pool: Pool): Promise<PriceImpactData> {
-    const totalLiquidity = parseFloat(pool.liquidity || '0');
+  
+  private calculateLiquidityAtPrice(price: number, reserveA: number, reserveB: number, currentPrice: number): number {
+    // Simplified constant product formula: x * y = k
+    const k = reserveA * reserveB;
     
-    if (totalLiquidity === 0) {
-      return {
-        buyImpact: [],
-        sellImpact: [],
-        slippageRisk: 10, // Maximum risk
-      };
-    }
+    // Calculate new reserves at the given price
+    const newReserveA = Math.sqrt(k / price);
+    const newReserveB = price * newReserveA;
     
-    // Calculate impact for different trade sizes
-    const tradeSizes = [0.001, 0.005, 0.01, 0.05, 0.1].map(pct => totalLiquidity * pct);
-    
+    return newReserveA * price + newReserveB;
+  }
+  
+  private calculatePriceImpact(reserveA: number, reserveB: number, currentPrice: number): PriceImpactData {
     const buyImpact: PriceImpactLevel[] = [];
     const sellImpact: PriceImpactLevel[] = [];
     
-    for (const size of tradeSizes) {
-      // Buy impact is typically slightly higher than sell impact
-      const buyPct = (size / totalLiquidity) * 100 * 2;
-      const sellPct = (size / totalLiquidity) * 100 * 1.8;
+    // Calculate impact for different trade sizes (0.1%, 0.5%, 1%, 2%, 5%, 10% of pool)
+    const tradeSizes = [0.001, 0.005, 0.01, 0.02, 0.05, 0.1];
+    const totalLiquidity = reserveA * currentPrice + reserveB;
+    
+    for (const sizePercent of tradeSizes) {
+      const tradeSize = totalLiquidity * sizePercent;
+      
+      // Buy impact (buying token B with token A)
+      const tokenAAmount = tradeSize / currentPrice;
+      const newReserveA = reserveA + tokenAAmount;
+      const newReserveB = (reserveA * reserveB) / newReserveA;
+      const tokenBReceived = reserveB - newReserveB;
+      const effectiveBuyPrice = tokenAAmount / tokenBReceived;
+      const buyPriceImpact = ((effectiveBuyPrice / currentPrice) - 1) * 100;
       
       buyImpact.push({
-        tradeSize: size,
-        priceImpact: Math.min(buyPct, 100),
+        tradeSize,
+        priceImpact: buyPriceImpact
       });
       
+      // Sell impact (selling token B for token A)
+      const tokenBAmount = tradeSize;
+      const newReserveB2 = reserveB + tokenBAmount;
+      const newReserveA2 = (reserveA * reserveB) / newReserveB2;
+      const tokenAReceived = reserveA - newReserveA2;
+      const effectiveSellPrice = tokenAReceived / tokenBAmount;
+      const sellPriceImpact = (1 - (effectiveSellPrice / currentPrice)) * 100;
+      
       sellImpact.push({
-        tradeSize: size,
-        priceImpact: Math.min(sellPct, 100),
+        tradeSize,
+        priceImpact: sellPriceImpact
       });
     }
     
-    // Calculate slippage risk based on liquidity and impact
-    const largestTradeImpact = buyImpact[buyImpact.length - 1].priceImpact;
-    const slippageRisk = Math.min(largestTradeImpact / 10, 10);
+    // Calculate slippage risk (0-10 scale)
+    const largestBuyImpact = buyImpact[buyImpact.length - 1].priceImpact;
+    const largestSellImpact = sellImpact[sellImpact.length - 1].priceImpact;
+    const slippageRisk = Math.min(10, (largestBuyImpact + largestSellImpact) / 4);
     
     return {
       buyImpact,
       sellImpact,
-      slippageRisk,
+      slippageRisk
     };
   }
-
-  /**
-   * Calculates a concentration score based on how evenly distributed the liquidity is
-   * Higher score means more concentrated (less evenly distributed)
-   */
+  
   private calculateConcentrationScore(depthLevels: LiquidityDepthLevel[]): number {
-    if (depthLevels.length <= 1) return 100; // Maximum concentration if only one level
+    // Calculate Gini coefficient-like measure for liquidity concentration
+    const sortedLevels = [...depthLevels].sort((a, b) => a.liquidityAmount - b.liquidityAmount);
+    let sumOfDifferences = 0;
+    let sumOfValues = 0;
     
-    // Calculate standard deviation of percentages
-    const percentages = depthLevels.map(level => level.percentOfTotal);
-    const mean = percentages.reduce((sum, pct) => sum + pct, 0) / percentages.length;
+    for (let i = 0; i < sortedLevels.length; i++) {
+      for (let j = 0; j < sortedLevels.length; j++) {
+        sumOfDifferences += Math.abs(sortedLevels[i].liquidityAmount - sortedLevels[j].liquidityAmount);
+      }
+      sumOfValues += sortedLevels[i].liquidityAmount;
+    }
     
-    const variance = percentages.reduce((sum, pct) => sum + Math.pow(pct - mean, 2), 0) / percentages.length;
-    const stdDev = Math.sqrt(variance);
-    
-    // Convert to a 0-100 scale where higher means more concentrated
-    // A perfectly even distribution would have stdDev = 0
-    // We'll scale it so that a stdDev of 30 or more is considered maximum concentration
-    return Math.min(stdDev * (100 / 30), 100);
+    // Normalize to 0-100 scale
+    const gini = sumOfDifferences / (2 * sortedLevels.length * sumOfValues);
+    return gini * 100;
   }
 }

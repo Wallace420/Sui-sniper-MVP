@@ -5,6 +5,10 @@ export interface SocialApiConfig {
   telegramApiKey?: string;
   discordApiKey?: string;
   redditApiKey?: string;
+  apiKey?: string;
+  apiEndpoint?: string;
+  baseUrl?: string;
+  rateLimit?: number;
 }
 
 export interface SocialMentionData {

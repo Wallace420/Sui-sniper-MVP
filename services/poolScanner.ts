@@ -328,4 +328,93 @@ export class PoolScanner {
             this.wsClient = null;
         }
     }
+
+    /**
+     * Scans all pools across all configured DEXes
+     * @returns Promise<Pool[]> Array of discovered pools
+     */
+    async scanAllPools(): Promise<Pool[]> {
+        const pools: Pool[] = [];
+        const dexEntries = Object.entries(this.dexes);
+        
+        for (const [dexName, dex] of dexEntries) {
+            try {
+                Logger.poolHeader(dexName);
+                const filter: SuiEventFilter = {
+                    MoveEventType: dex.MoveEventType
+                };
+                
+                const events = await this.client.queryEvents({
+                    query: filter,
+                    order: "descending",
+                    limit: 50
+                });
+                
+                if (!events?.data || events.data.length === 0) {
+                    Logger.scanningStatus(dexName, 0);
+                    continue;
+                }
+                
+                for (const event of events.data) {
+                    const pool = await this.extractPoolFromEvent(event, dex);
+                    if (pool) {
+                        pools.push(pool);
+                    }
+                }
+                
+                Logger.scanningStatus(dexName, pools.length);
+            } catch (error) {
+                Logger.error(`Error scanning pools for ${dexName}`, error);
+            }
+        }
+        
+        return pools;
+    }
+    
+    /**
+     * Extracts pool information from an event
+     * @param event The event containing pool data
+     * @param dex The DEX associated with the event
+     * @returns Promise<Pool | null> The extracted pool or null if extraction failed
+     */
+    private async extractPoolFromEvent(event: any, dex: Dex): Promise<Pool | null> {
+        try {
+            const parsedJson = event.parsedJson as Record<string, any>;
+            const poolId = parsedJson.pool_id || parsedJson.poolId;
+            
+            if (!poolId) return null;
+            
+            // Check if pool is already in cache
+            const cacheKey = `${dex.Name}-${poolId}`;
+            if (this.poolCache[cacheKey]) {
+                return this.poolCache[cacheKey].pool;
+            }
+            
+            const poolData = await dex.GetPools(this.client, poolId);
+            if (!poolData) return null;
+            
+            const pool: Pool = {
+                id: cacheKey,
+                poolId,
+                coin_a: poolData.coin_a,
+                coin_b: poolData.coin_b,
+                dex: dex.Name,
+                price: poolData.price || '0',
+                liquidity: poolData.liquidity || '0',
+                poolCreated: Number(event.timestampMs) || Date.now()
+            };
+            
+            // Add to cache
+            this.poolCache[cacheKey] = {
+                pool,
+                timestamp: Date.now(),
+                validationAttempts: 0
+            };
+            
+            return pool;
+        } catch (error) {
+            Logger.error('Error extracting pool from event', error);
+            return null;
+        }
+    }
 }

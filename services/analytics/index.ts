@@ -2,6 +2,7 @@ import { TokenAnalytics, TokenHolderAnalysis, TokenHolder, TokenVolumeData } fro
 import { LiquidityAnalytics, LiquidityDepthAnalysis, LiquidityDepthLevel, PriceImpactData, PriceImpactLevel } from './liquidityAnalytics';
 import { SocialAnalytics, SocialSentimentAnalysis, SentimentDataPoint, MentionDataPoint, CommunityEngagementMetrics, PlatformEngagement, DeveloperActivityMetrics, ActivityDataPoint } from './socialAnalytics';
 import { SocialApiConfig } from './socialApiClient';
+import { SuiClient } from '../../types/sui-sdk';
 
 export {
   // Token analytics exports
@@ -28,7 +29,7 @@ export {
 };
 
 // Factory function to create analytics instances
-export const createAnalytics = (client: any, socialApiConfig?: SocialApiConfig) => {
+export const createAnalytics = (client: SuiClient, socialApiConfig?: SocialApiConfig) => {
   return {
     tokenAnalytics: new TokenAnalytics(client),
     liquidityAnalytics: new LiquidityAnalytics(client),
