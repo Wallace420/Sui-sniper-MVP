@@ -1,5 +1,9 @@
 // Production-Ready Code with puppeteer for Twitter Data, Enhanced Error Handling, Security, and Performance Enhancements
+<<<<<<< HEAD
 import { SuiClient, SuiObjectResponse, SocialMetricsData } from '../../types/sui-sdk';
+=======
+import { SuiClient, isSuiObjectResponse, MockSuiClientMethods } from '../../tests/test-utils';
+>>>>>>> 8fbe437abf0a7bf44331343c53be04c7f6d10d24
 import { SocialApiClient, SocialApiConfig } from './socialApiClient';
 import vader from 'vader-sentiment';
 import puppeteer from 'puppeteer';  // Replaced scrape-twitter with puppeteer for scraping
@@ -119,6 +123,7 @@ interface SocialAnalyticsCache {
 
 // SocialAnalytics class with all methods restored
 export class SocialAnalytics {
+<<<<<<< HEAD
   private client: SuiClient;
   private apiClient: SocialApiClient | null = null;
   private cache: SocialAnalyticsCache = {};
@@ -228,18 +233,35 @@ export class SocialAnalytics {
       throw new Error('Failed to analyze developer activity');
     }
   }
+=======
+  [x: string]: any;
+  getCommunityEngagement(coin_a: string) {
+      throw new Error('Method not implemented.');
+  }
+  private client: MockSuiClientMethods;
+>>>>>>> 8fbe437abf0a7bf44331343c53be04c7f6d10d24
   private cache: SocialAnalyticsCache = {};
   private readonly CACHE_DURATION = 30 * 60 * 1000;
   private apiClient: SocialApiClient;
  
+<<<<<<< HEAD
   constructor(client: SuiClient, apiConfig: SocialApiConfig) {
+=======
+  constructor(client: MockSuiClientMethods, apiConfig: SocialApiConfig) {
+>>>>>>> 8fbe437abf0a7bf44331343c53be04c7f6d10d24
     this.client = client;
     this.apiClient = new SocialApiClient(apiConfig);
   }
 
+<<<<<<< HEAD
   private getFieldsFromData(data: SuiObjectResponse | null): Record<string, any> | null {
     if (data?.data?.content?.dataType === 'moveObject' && data.data.content.fields) {
       return data.data.content.fields;
+=======
+  private getFieldsFromData(data: typeof isSuiObjectResponse | null) {
+    if (data?.data && 'content' in data.data && data.data.content && 'fields' in data.data.content) {
+      return (data.data.content as any).fields;
+>>>>>>> 8fbe437abf0a7bf44331343c53be04c7f6d10d24
     }
     return null;
   }

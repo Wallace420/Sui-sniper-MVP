@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { SuiClient, SuiObjectResponse, PoolData } from '../../types/sui-sdk';
+=======
+import { MockSuiClientMethods } from '../../tests/test-utils';
+>>>>>>> 8fbe437abf0a7bf44331343c53be04c7f6d10d24
 import { Pool } from '../../dex';
 
 export interface LiquidityDepthAnalysis {
@@ -37,11 +41,15 @@ interface LiquidityAnalyticsCache {
 }
 
 export class LiquidityAnalytics {
-  private client: SuiClient;
+  private client: MockSuiClientMethods;
   private cache: LiquidityAnalyticsCache = {};
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
  
+<<<<<<< HEAD
   constructor(client: SuiClient) {
+=======
+  constructor(client: MockSuiClientMethods) {
+>>>>>>> 8fbe437abf0a7bf44331343c53be04c7f6d10d24
     this.client = client;
   }
 
